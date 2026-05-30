@@ -20,16 +20,25 @@ from api.errors import (
     UserNotFoundError,
 )
 from api.schemas import (
+    AuditEntryOut,
+    BatchActionRequest,
+    BatchActionResult,
     DashboardStatsOut,
     EntityOut,
+    FileSummaryOut,
     FindingActionRequest,
     FindingOut,
+    GraphTestOut,
     HealthDetailOut,
     OwnerSummaryOut,
     RecentScanOut,
     RetentionFileOut,
+    RetentionNotifyRequest,
+    RetentionNotifyResult,
     RetentionSummaryOut,
+    ScanCompareOut,
     ScanDeltaResponse,
+    ScanDiffFile,
     ScanOut,
     ScanProgress,
     ScanRunRequest,
@@ -62,12 +71,12 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 
-@router.get("/health")
+@router.get("/health", tags=["Health"])
 def health() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/admin/health", response_model=HealthDetailOut)
+@router.get("/admin/health", response_model=HealthDetailOut, tags=["Admin"])
 def health_detail(db: Session = Depends(get_db)) -> HealthDetailOut:
     """Live resource intensity metrics — CPU, RAM, uptime, cache, DB counts."""
     import sys
@@ -103,7 +112,7 @@ def health_detail(db: Session = Depends(get_db)) -> HealthDetailOut:
     )
 
 
-@router.get("/users", response_model=list[UserOut])
+@router.get("/users", response_model=list[UserOut], tags=["Users"])
 def list_users(db: Session = Depends(get_db)) -> list[UserOut]:
     rows = db.execute(select(User).order_by(User.id)).scalars().all()
     return [UserOut.model_validate(u) for u in rows]
@@ -119,7 +128,7 @@ def _connector_for(_source_path: str) -> LocalFolderConnector:
     return LocalFolderConnector(root=get_settings().data_root_path)
 
 
-@router.post("/scan/run", response_model=ScanRunResponse)
+@router.post("/scan/run", response_model=ScanRunResponse, tags=["Scans"])
 def scan_run(
     body: ScanRunRequest,
     background: BackgroundTasks,
@@ -138,7 +147,7 @@ def scan_run(
     return ScanRunResponse(scan_id=scan_id, status="running")
 
 
-@router.post("/scan/delta", response_model=ScanDeltaResponse)
+@router.post("/scan/delta", response_model=ScanDeltaResponse, tags=["Scans"])
 def scan_delta(
     body: ScanRunRequest,
     background: BackgroundTasks,
@@ -182,7 +191,7 @@ def scan_delta(
     )
 
 
-@router.get("/scan/{scan_id}", response_model=ScanOut)
+@router.get("/scan/{scan_id}", response_model=ScanOut, tags=["Scans"])
 def get_scan(scan_id: str = Path(...), db: Session = Depends(get_db)) -> ScanOut:
     row = db.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
     if row is None:
@@ -210,10 +219,16 @@ def get_scan(scan_id: str = Path(...), db: Session = Depends(get_db)) -> ScanOut
     return out
 
 
-@router.get("/scans", response_model=list[ScanOut])
-def list_scans(db: Session = Depends(get_db)) -> list[ScanOut]:
+@router.get("/scans", response_model=list[ScanOut], tags=["Scans"])
+def list_scans(
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[ScanOut]:
     rows = (
-        db.execute(select(Scan).order_by(desc(Scan.started_at)).limit(10))
+        db.execute(
+            select(Scan).order_by(desc(Scan.started_at)).limit(limit).offset(offset)
+        )
         .scalars()
         .all()
     )
@@ -246,6 +261,9 @@ def _build_finding_out(db: Session, f: Finding) -> FindingOut:
                 owner_name = mod_user.name
 
     entities = [EntityOut.model_validate(e) for e in f.entities]
+    confidence = round(
+        sum(e.confidence for e in entities) / len(entities) if entities else 0.0, 3
+    )
 
     return FindingOut(
         id=f.id,
@@ -257,6 +275,7 @@ def _build_finding_out(db: Session, f: Finding) -> FindingOut:
         file_sha256=file_row.sha256,
         document_type=f.document_type,
         sensitivity_level=f.sensitivity_level,
+        confidence=confidence,
         entities=entities,
         reasoning=f.reasoning,
         retention_recommendation=f.retention_recommendation,
@@ -272,10 +291,12 @@ def _build_finding_out(db: Session, f: Finding) -> FindingOut:
     )
 
 
-@router.get("/findings/by-user/{user_id}", response_model=list[FindingOut])
+@router.get("/findings/by-user/{user_id}", response_model=list[FindingOut], tags=["Findings"])
 def findings_by_user(
     user_id: str = Path(...),
     status: Optional[str] = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[FindingOut]:
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
@@ -309,10 +330,64 @@ def findings_by_user(
         seen.add(f.id)
         combined.append(f)
 
-    return [_build_finding_out(db, f) for f in combined[:100]]
+    return [_build_finding_out(db, f) for f in combined[offset: offset + limit]]
 
 
-@router.get("/findings/{finding_id}", response_model=FindingOut)
+@router.get("/findings/export", tags=["Findings"])
+def findings_export(
+    format: str = Query(default="csv", description="csv or json"),
+    status: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Export all findings as CSV or JSON for compliance reporting."""
+    import csv as csv_mod
+    import io as _io
+    import json as _json
+
+    stmt = select(Finding, File).join(File, File.id == Finding.file_id)
+    if status:
+        stmt = stmt.where(Finding.review_status == status)
+    stmt = stmt.order_by(desc(Finding.scan_timestamp))
+    rows = db.execute(stmt).all()
+
+    if format == "json":
+        out = []
+        for f, fl in rows:
+            out.append({
+                "finding_id": f.id, "file_name": fl.name, "file_path": fl.path,
+                "document_type": f.document_type, "sensitivity_level": f.sensitivity_level,
+                "review_status": f.review_status, "owner_user_id": f.owner_user_id,
+                "master_of_data_id": f.master_of_data_id,
+                "scan_timestamp": f.scan_timestamp.isoformat(),
+                "reasoning": f.reasoning, "retention_recommendation": f.retention_recommendation,
+            })
+        return StreamingResponse(
+            iter([_json.dumps(out, indent=2, ensure_ascii=False).encode("utf-8")]),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=findings_export.json"},
+        )
+
+    buf = _io.StringIO()
+    writer = csv_mod.writer(buf)
+    writer.writerow([
+        "finding_id", "file_name", "file_path", "document_type",
+        "sensitivity_level", "review_status", "owner_user_id",
+        "scan_timestamp", "reasoning", "retention_recommendation",
+    ])
+    for f, fl in rows:
+        writer.writerow([
+            f.id, fl.name, fl.path, f.document_type, f.sensitivity_level,
+            f.review_status, f.owner_user_id or f.master_of_data_id,
+            f.scan_timestamp.isoformat(), f.reasoning, f.retention_recommendation,
+        ])
+    return StreamingResponse(
+        iter([buf.getvalue().encode("utf-8")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=findings_export.csv"},
+    )
+
+
+@router.get("/findings/{finding_id}", response_model=FindingOut, tags=["Findings"])
 def get_finding(finding_id: str = Path(...), db: Session = Depends(get_db)) -> FindingOut:
     f = db.execute(select(Finding).where(Finding.id == finding_id)).scalar_one_or_none()
     if f is None:
@@ -322,7 +397,7 @@ def get_finding(finding_id: str = Path(...), db: Session = Depends(get_db)) -> F
     return _build_finding_out(db, f)
 
 
-@router.post("/findings/{finding_id}/action", response_model=FindingOut)
+@router.post("/findings/{finding_id}/action", response_model=FindingOut, tags=["Findings"])
 def finding_action(
     body: FindingActionRequest,
     finding_id: str = Path(...),
@@ -376,7 +451,7 @@ def finding_action(
     return _build_finding_out(db, f)
 
 
-@router.post("/files/{file_id}/rescan")
+@router.post("/files/{file_id}/rescan", tags=["Files"])
 def file_rescan(file_id: str = Path(...), db: Session = Depends(get_db)) -> dict:
     file_row = db.execute(select(File).where(File.id == file_id)).scalar_one_or_none()
     if file_row is None:
@@ -390,7 +465,7 @@ def file_rescan(file_id: str = Path(...), db: Session = Depends(get_db)) -> dict
 # ---------------------------------------------------------------------------
 
 
-@router.get("/admin/dashboard", response_model=DashboardStatsOut)
+@router.get("/admin/dashboard", response_model=DashboardStatsOut, tags=["Admin"])
 def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     total_files = db.execute(select(func.count()).select_from(File)).scalar_one()
     total_size = db.execute(select(func.coalesce(func.sum(File.size_bytes), 0))).scalar_one()
@@ -545,7 +620,7 @@ def _read_latest_eval_metrics() -> tuple[float, float, float]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/admin/retention", response_model=RetentionSummaryOut)
+@router.get("/admin/retention", response_model=RetentionSummaryOut, tags=["Admin"])
 def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
     """Group all pending findings by retention status.
 
@@ -650,7 +725,7 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
     )
 
 
-@router.get("/admin/owners", response_model=list[OwnerSummaryOut])
+@router.get("/admin/owners", response_model=list[OwnerSummaryOut], tags=["Admin"])
 def admin_owners(db: Session = Depends(get_db)) -> list[OwnerSummaryOut]:
     out: list[OwnerSummaryOut] = []
 
@@ -781,7 +856,7 @@ def admin_owners(db: Session = Depends(get_db)) -> list[OwnerSummaryOut]:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/files/{file_id}/preview")
+@router.get("/files/{file_id}/preview", tags=["Files"])
 def file_preview(file_id: str = Path(...), db: Session = Depends(get_db)) -> Response:
     file_row = db.execute(select(File).where(File.id == file_id)).scalar_one_or_none()
     if file_row is None:
@@ -803,3 +878,367 @@ def file_preview(file_id: str = Path(...), db: Session = Depends(get_db)) -> Res
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{file_row.name}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# #2 — Findings export
+# ---------------------------------------------------------------------------
+
+
+@router.get("/findings/export", tags=["Findings"])
+def findings_export(
+    format: str = Query(default="csv", description="csv or json"),
+    status: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+):
+    """Export all findings as CSV or JSON for compliance reporting."""
+    import csv as csv_mod
+    import io as _io
+    import json as _json
+
+    stmt = select(Finding, File).join(File, File.id == Finding.file_id)
+    if status:
+        stmt = stmt.where(Finding.review_status == status)
+    stmt = stmt.order_by(desc(Finding.scan_timestamp))
+    rows = db.execute(stmt).all()
+
+    if format == "json":
+        out = []
+        for f, fl in rows:
+            out.append({
+                "finding_id": f.id, "file_name": fl.name, "file_path": fl.path,
+                "document_type": f.document_type, "sensitivity_level": f.sensitivity_level,
+                "review_status": f.review_status, "owner_user_id": f.owner_user_id,
+                "master_of_data_id": f.master_of_data_id,
+                "scan_timestamp": f.scan_timestamp.isoformat(),
+                "reasoning": f.reasoning, "retention_recommendation": f.retention_recommendation,
+            })
+        return StreamingResponse(
+            iter([_json.dumps(out, indent=2, ensure_ascii=False).encode("utf-8")]),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=findings_export.json"},
+        )
+
+    buf = _io.StringIO()
+    writer = csv_mod.writer(buf)
+    writer.writerow([
+        "finding_id", "file_name", "file_path", "document_type",
+        "sensitivity_level", "review_status", "owner_user_id",
+        "scan_timestamp", "reasoning", "retention_recommendation",
+    ])
+    for f, fl in rows:
+        writer.writerow([
+            f.id, fl.name, fl.path, f.document_type, f.sensitivity_level,
+            f.review_status, f.owner_user_id or f.master_of_data_id,
+            f.scan_timestamp.isoformat(), f.reasoning, f.retention_recommendation,
+        ])
+    return StreamingResponse(
+        iter([buf.getvalue().encode("utf-8")]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=findings_export.csv"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# #3 — Scan compare
+# ---------------------------------------------------------------------------
+
+
+@router.get("/scans/compare", response_model=ScanCompareOut, tags=["Scans"])
+def scans_compare(
+    a: str = Query(..., description="Scan ID A (older)"),
+    b: str = Query(..., description="Scan ID B (newer)"),
+    db: Session = Depends(get_db),
+) -> ScanCompareOut:
+    for sid in (a, b):
+        row = db.execute(select(Scan).where(Scan.id == sid)).scalar_one_or_none()
+        if row is None:
+            raise ScanNotFoundError(f"No scan '{sid}'", {"scan_id": sid})
+
+    def _findings_map(scan_id: str) -> dict[str, dict]:
+        rows = db.execute(
+            select(Finding, File).join(File, File.id == Finding.file_id)
+            .where(Finding.scan_id == scan_id)
+        ).all()
+        return {fl.path: {"finding": f, "file": fl} for f, fl in rows}
+
+    map_a = _findings_map(a)
+    map_b = _findings_map(b)
+    all_paths = set(map_a) | set(map_b)
+
+    added, removed, changed, unchanged = [], [], [], []
+    for path in sorted(all_paths):
+        fa = map_a.get(path)
+        fb = map_b.get(path)
+        file_name = (fb or fa)["file"].name  # type: ignore[index]
+
+        if fa is None:
+            added.append(ScanDiffFile(
+                file_name=file_name, file_path=path, change="added",
+                document_type_b=fb["finding"].document_type,
+                sensitivity_b=fb["finding"].sensitivity_level,
+            ))
+        elif fb is None:
+            removed.append(ScanDiffFile(
+                file_name=file_name, file_path=path, change="removed",
+                document_type_a=fa["finding"].document_type,
+                sensitivity_a=fa["finding"].sensitivity_level,
+            ))
+        elif (fa["finding"].document_type != fb["finding"].document_type or
+              fa["finding"].sensitivity_level != fb["finding"].sensitivity_level):
+            changed.append(ScanDiffFile(
+                file_name=file_name, file_path=path, change="changed",
+                document_type_a=fa["finding"].document_type,
+                document_type_b=fb["finding"].document_type,
+                sensitivity_a=fa["finding"].sensitivity_level,
+                sensitivity_b=fb["finding"].sensitivity_level,
+            ))
+        else:
+            unchanged.append(ScanDiffFile(
+                file_name=file_name, file_path=path, change="unchanged",
+                document_type_a=fa["finding"].document_type,
+                document_type_b=fb["finding"].document_type,
+            ))
+
+    return ScanCompareOut(
+        scan_id_a=a, scan_id_b=b,
+        added=added, removed=removed, changed=changed, unchanged=unchanged,
+        total_added=len(added), total_removed=len(removed), total_changed=len(changed),
+    )
+
+
+# ---------------------------------------------------------------------------
+# #7 — Audit log
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/audit", response_model=list[AuditEntryOut], tags=["Admin"])
+def admin_audit(
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[AuditEntryOut]:
+    """Chronological log of all reviewer actions — GDPR Art. 5(2) accountability."""
+    rows = db.execute(
+        select(Finding, File)
+        .join(File, File.id == Finding.file_id)
+        .where(Finding.review_status != "pending")
+        .order_by(desc(Finding.reviewed_at))
+        .limit(limit).offset(offset)
+    ).all()
+
+    result = []
+    for f, fl in rows:
+        reviewer_name: Optional[str] = None
+        if f.reviewed_by_user_id:
+            u = db.execute(select(User).where(User.id == f.reviewed_by_user_id)).scalar_one_or_none()
+            if u:
+                reviewer_name = u.name
+        result.append(AuditEntryOut(
+            finding_id=f.id, file_name=fl.name, action=f.review_status,
+            reviewed_by_user_id=f.reviewed_by_user_id, reviewer_name=reviewer_name,
+            reviewed_at=f.reviewed_at, note=f.review_note,
+        ))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# #8 — Batch action
+# ---------------------------------------------------------------------------
+
+
+@router.post("/findings/batch-action", response_model=BatchActionResult, tags=["Findings"])
+def findings_batch_action(
+    body: BatchActionRequest,
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
+) -> BatchActionResult:
+    """Apply one action to multiple findings at once."""
+    processed, failed = 0, 0
+    results = []
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    for fid in body.finding_ids:
+        f = db.execute(select(Finding).where(Finding.id == fid)).scalar_one_or_none()
+        if f is None:
+            failed += 1
+            results.append({"finding_id": fid, "ok": False, "error": "not_found"})
+            continue
+        try:
+            if body.action == "delete":
+                file_row = db.execute(select(File).where(File.id == f.file_id)).scalar_one_or_none()
+                if file_row:
+                    connector = LocalFolderConnector(root=get_settings().data_root_path)
+                    physical = connector._resolve(file_row.path)
+                    physical.unlink(missing_ok=True)
+                    file_row.has_findings = False
+                f.review_status = ReviewStatus.DELETED.value
+            elif body.action == "mark_false_positive":
+                f.review_status = ReviewStatus.MARKED_FALSE_POSITIVE.value
+            elif body.action == "keep_business_need":
+                f.review_status = ReviewStatus.KEPT_BUSINESS_NEED.value
+            if x_user_id:
+                f.reviewed_by_user_id = x_user_id
+            f.reviewed_at = now
+            f.review_note = body.note
+            processed += 1
+            results.append({"finding_id": fid, "ok": True})
+        except Exception as exc:  # noqa: BLE001
+            failed += 1
+            results.append({"finding_id": fid, "ok": False, "error": str(exc)})
+
+    db.commit()
+    return BatchActionResult(processed=processed, failed=failed, results=results)
+
+
+# ---------------------------------------------------------------------------
+# #9 — Graph connector test
+# ---------------------------------------------------------------------------
+
+
+@router.get("/connectors/graph/test", response_model=GraphTestOut, tags=["Admin"])
+def graph_connector_test() -> GraphTestOut:
+    """Show what a real Graph connector would connect to and what it needs."""
+    return GraphTestOut(
+        status="stub",
+        message=(
+            "GraphConnector is implemented as a stub. Swap in a real implementation "
+            "by providing tenant_id, client_id, and client_secret. The Connector "
+            "interface (list_files, read_file, get_owner) is already wired into the "
+            "scan pipeline — no other changes needed."
+        ),
+        would_connect_to="https://graph.microsoft.com/v1.0/users/{userId}/drive/root/children",
+        required_permissions=["Files.Read.All", "Sites.Read.All", "User.Read.All"],
+        sdk_package="msgraph-sdk or msal + httpx",
+    )
+
+
+# ---------------------------------------------------------------------------
+# #10 — File summary
+# ---------------------------------------------------------------------------
+
+
+@router.get("/files/{file_id}/summary", response_model=FileSummaryOut, tags=["Files"])
+def file_summary(file_id: str = Path(...), db: Session = Depends(get_db)) -> FileSummaryOut:
+    """Human-readable summary of a file's latest finding."""
+    file_row = db.execute(select(File).where(File.id == file_id)).scalar_one_or_none()
+    if file_row is None:
+        raise FileNotFoundAppError(f"No file with id '{file_id}'", {"file_id": file_id})
+
+    finding = db.execute(
+        select(Finding).where(Finding.file_id == file_id)
+        .order_by(desc(Finding.scan_timestamp)).limit(1)
+    ).scalar_one_or_none()
+
+    if finding is None:
+        return FileSummaryOut(
+            file_id=file_id, file_name=file_row.name,
+            document_type="unknown", sensitivity_level="low",
+            confidence=0.0, owner_name=None,
+            summary="No findings for this file.",
+            entities_summary="No personal data detected.",
+            retention_recommendation="No recommendation available.",
+        )
+
+    entities = db.execute(select(Entity).where(Entity.finding_id == finding.id)).scalars().all()
+    confidence = round(sum(e.confidence for e in entities) / len(entities) if entities else 0.0, 3)
+
+    owner_name: Optional[str] = None
+    if finding.owner_user_id:
+        u = db.execute(select(User).where(User.id == finding.owner_user_id)).scalar_one_or_none()
+        if u:
+            owner_name = u.name
+
+    entity_parts = list({f"{e.type}: {e.value}" for e in entities})[:8]
+    entities_summary = "; ".join(entity_parts) if entity_parts else "No entities detected."
+
+    sensitivity_label = {"high": "HIGH sensitivity", "medium": "MEDIUM sensitivity", "low": "LOW sensitivity"}
+    summary = (
+        f"{file_row.name} is a {finding.document_type.replace('_', ' ')} document "
+        f"with {sensitivity_label.get(finding.sensitivity_level, 'unknown sensitivity')}. "
+        f"{finding.reasoning[:200]}"
+    )
+
+    return FileSummaryOut(
+        file_id=file_id, file_name=file_row.name,
+        document_type=finding.document_type, sensitivity_level=finding.sensitivity_level,
+        confidence=confidence, owner_name=owner_name,
+        summary=summary, entities_summary=entities_summary,
+        retention_recommendation=finding.retention_recommendation,
+    )
+
+
+# ---------------------------------------------------------------------------
+# #11 — Retention notify stub
+# ---------------------------------------------------------------------------
+
+
+@router.post("/admin/retention/notify", response_model=RetentionNotifyResult, tags=["Admin"])
+def retention_notify(
+    body: RetentionNotifyRequest,
+    db: Session = Depends(get_db),
+) -> RetentionNotifyResult:
+    """Notify owners of files past their retention deadline (dry-run by default).
+
+    In production this would send email via SMTP or Teams webhook.
+    Currently logs who would be notified and returns the list.
+    """
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+
+    RETENTION_YEARS_MAP = {
+        "expense_report": 10, "supplier_onboarding": 10, "financial_authorization": 10,
+        "incident_report": 5, "it_access_request": 5,
+        "medical_record": 3, "internal_memo": 3, "training_evaluation": 2,
+    }
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    one_year = now.replace(year=now.year + 1)
+
+    findings = db.execute(
+        select(Finding, File).join(File, File.id == Finding.file_id)
+        .where(Finding.review_status == "pending")
+    ).all()
+
+    seen: set[str] = set()
+    notified = []
+    for f, fl in findings:
+        if fl.id in seen:
+            continue
+        seen.add(fl.id)
+        years = RETENTION_YEARS_MAP.get(f.document_type, 3)
+        base_year = f.document_year if f.document_year else f.scan_timestamp.year
+        try:
+            deadline = f.scan_timestamp.replace(year=base_year + years)
+        except ValueError:
+            deadline = f.scan_timestamp.replace(year=f.scan_timestamp.year + years)
+
+        is_past = deadline < now
+        is_expiring = not is_past and deadline < one_year
+        if not is_past and not (body.include_expiring_soon and is_expiring):
+            continue
+
+        owner_email: Optional[str] = None
+        owner_name: Optional[str] = None
+        uid = f.owner_user_id
+        if uid is None and f.master_of_data_id:
+            mod = db.execute(select(MasterOfData).where(MasterOfData.id == f.master_of_data_id)).scalar_one_or_none()
+            if mod:
+                uid = mod.user_id
+        if uid:
+            u = db.execute(select(User).where(User.id == uid)).scalar_one_or_none()
+            if u:
+                owner_email = u.email
+                owner_name = u.name
+
+        entry = {
+            "file_name": fl.name, "document_type": f.document_type,
+            "deadline": deadline.isoformat(), "owner_name": owner_name,
+            "owner_email": owner_email, "status": "past_deadline" if is_past else "expiring_soon",
+        }
+        notified.append(entry)
+        if body.dry_run:
+            _log.info("[DRY RUN] Would notify %s about %s (deadline %s)", owner_email, fl.name, deadline.date())
+        else:
+            _log.info("[NOTIFY] Sending notification to %s about %s", owner_email, fl.name)
+
+    return RetentionNotifyResult(dry_run=body.dry_run, notified=notified, total=len(notified))

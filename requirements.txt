@@ -14,3 +14,5 @@ pytest==8.3.*
 httpx==0.27.*
 reportlab==4.5.*
 psutil==5.9.*
+# Optional: OCR for scanned/image-only PDFs (requires tesseract binary on PATH)
+# pip install pytesseract pdf2image

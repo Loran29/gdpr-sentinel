@@ -48,6 +48,7 @@ class FindingOut(_Base):
     file_sha256: str
     document_type: str
     sensitivity_level: str
+    confidence: float = 0.0
     entities: list[EntityOut]
     reasoning: str
     retention_recommendation: str
@@ -234,6 +235,81 @@ class ScanDeltaResponse(BaseModel):
 class FindingActionRequest(BaseModel):
     action: Literal["delete", "mark_false_positive", "keep_business_need"]
     note: Optional[str] = None
+
+
+class BatchActionRequest(BaseModel):
+    finding_ids: list[str]
+    action: Literal["delete", "mark_false_positive", "keep_business_need"]
+    note: Optional[str] = None
+
+
+class BatchActionResult(BaseModel):
+    processed: int
+    failed: int
+    results: list[dict]
+
+
+class ScanDiffFile(BaseModel):
+    file_name: str
+    file_path: str
+    change: Literal["added", "removed", "changed", "unchanged"]
+    document_type_a: Optional[str] = None
+    document_type_b: Optional[str] = None
+    sensitivity_a: Optional[str] = None
+    sensitivity_b: Optional[str] = None
+
+
+class ScanCompareOut(BaseModel):
+    scan_id_a: str
+    scan_id_b: str
+    added: list[ScanDiffFile]
+    removed: list[ScanDiffFile]
+    changed: list[ScanDiffFile]
+    unchanged: list[ScanDiffFile]
+    total_added: int
+    total_removed: int
+    total_changed: int
+
+
+class AuditEntryOut(BaseModel):
+    finding_id: str
+    file_name: str
+    action: str
+    reviewed_by_user_id: Optional[str]
+    reviewer_name: Optional[str]
+    reviewed_at: Optional[datetime]
+    note: Optional[str]
+
+
+class FileSummaryOut(BaseModel):
+    file_id: str
+    file_name: str
+    document_type: str
+    sensitivity_level: str
+    confidence: float
+    owner_name: Optional[str]
+    summary: str
+    entities_summary: str
+    retention_recommendation: str
+
+
+class RetentionNotifyRequest(BaseModel):
+    dry_run: bool = True
+    include_expiring_soon: bool = False
+
+
+class RetentionNotifyResult(BaseModel):
+    dry_run: bool
+    notified: list[dict]
+    total: int
+
+
+class GraphTestOut(BaseModel):
+    status: str
+    message: str
+    would_connect_to: str
+    required_permissions: list[str]
+    sdk_package: str
 
 
 # ---------------------------------------------------------------------------
