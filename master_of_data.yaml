@@ -1,0 +1,27 @@
+direct_owner_patterns:
+  - pattern: "/data/onedrive/sara.hoffmann/"
+    user_id: u_001
+  - pattern: "/data/onedrive/david.schmid/"
+    user_id: u_002
+  - pattern: "/data/onedrive/elena.fischer/"
+    user_id: u_003
+  - pattern: "/data/onedrive/nina.beck/"
+    user_id: u_004
+
+masters_of_data:
+  - id: mod_hr_shared
+    user_id: u_006
+    sources: ["/data/shared/HR/"]
+    description: "Master of Data for HR shared drives"
+  - id: mod_finance_shared
+    user_id: u_007
+    sources: ["/data/shared/Finance/"]
+    description: "Master of Data for Finance shared drives"
+  - id: mod_it_shared
+    user_id: u_008
+    sources: ["/data/shared/IT/"]
+    description: "Master of Data for IT shared drives"
+  - id: mod_default
+    user_id: u_006
+    sources: ["**"]
+    description: "Catch-all Master of Data for orphan files"
