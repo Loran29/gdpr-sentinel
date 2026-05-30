@@ -227,12 +227,3 @@ function Metric({ label, value, monospace }: { label: string; value: string; mon
     </div>
   );
 }
-
-
-
-    <div className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
-      <p className="text-[11px] uppercase tracking-wide text-text_medium">{label}</p>
-      <p className={`${monospace ? "font-mono text-[13px]" : "text-sm"} mt-1 text-text_dark`}>{value}</p>
-    </div>
-  );
-}
