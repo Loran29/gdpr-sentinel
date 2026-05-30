@@ -112,7 +112,7 @@ This is what the scanner produces and what `/findings/*` endpoints return. Front
 
 **Field rules:**
 - `owner_type`: `"direct"` (owner_user_id is populated) or `"master_of_data"` (master_of_data_id is populated). Exactly one of the two ID fields must be non-null.
-- `review_status`: `"pending"` until the user clicks an action button. Then `"confirmed_business_need"` or `"acknowledged_cleanup"`.
+- `review_status`: `"pending"` until the user clicks an action button. Then `"kept_business_need"`, `"marked_false_positive"`, or `"deleted"`.
 - `reasoning` is **mandatory** and must be 2–4 sentences. This is what the user sees in the review sheet — it carries the entire "Focus 02: Classify with context" demo.
 - `entities` is never empty for a flagged finding. If there are no entities, the file isn't flagged and no Finding is created.
 - `confidence` is 0.0–1.0. Regex matches are always 1.0. Presidio reports its own score. LLM-extracted entities default to 0.85 unless the LLM is asked to self-rate.
@@ -253,7 +253,7 @@ Base URL during dev: `http://localhost:8000`. All responses are JSON. All errors
 | GET | `/scans` | Recent scans (default last 10) | — | `Scan[]` |
 | GET | `/findings/by-user/{user_id}` | All findings owned by user | query: `?status=pending` (optional) | `Finding[]` |
 | GET | `/findings/{finding_id}` | Single finding detail | — | `Finding` |
-| POST | `/findings/{finding_id}/action` | Record user decision | `{"action": "confirm_business_need" \| "acknowledge_cleanup", "note": "..."}` | `Finding` (updated) |
+| POST | `/findings/{finding_id}/action` | Record user decision | `{"action": "keep_business_need" \| "mark_false_positive" \| "delete", "note": "..."}` | `Finding` (updated) |
 | GET | `/admin/dashboard` | All KPIs | — | `DashboardStats` |
 | GET | `/admin/owners` | Owner table | — | `OwnerSummary[]` |
 | GET | `/files/{file_id}/preview` | Raw PDF bytes for in-app preview | — | `application/pdf` stream |
@@ -271,7 +271,7 @@ DOCUMENT_TYPES = ["expense_report", "it_access_request", "incident_report",
 
 SENSITIVITY_LEVELS = ["high", "medium", "low"]
 
-REVIEW_STATUSES = ["pending", "confirmed_business_need", "acknowledged_cleanup"]
+REVIEW_STATUSES = ["pending", "deleted", "marked_false_positive", "kept_business_need"]
 
 OWNER_TYPES = ["direct", "master_of_data"]
 

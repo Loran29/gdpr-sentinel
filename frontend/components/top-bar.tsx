@@ -5,9 +5,11 @@ import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UserSwitcher } from "@/components/user-switcher";
 import { use_app_state } from "@/context/app-state";
+import { get_api_mode } from "@/src/lib/api-client";
 
 export function TopBar({ on_open_run_scan }: { on_open_run_scan: () => void }) {
   const { logout } = use_app_state();
+  const is_mock = get_api_mode() === "mock";
 
   return (
     <header className="border-b border-border_grey bg-card_bg px-4 py-2.5 shadow-[0_1px_0_rgba(15,23,42,0.04)] lg:px-5">
@@ -24,10 +26,12 @@ export function TopBar({ on_open_run_scan }: { on_open_run_scan: () => void }) {
         <div className="flex items-center gap-2.5">
           <ThemeSwitcher />
           <UserSwitcher />
-          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
-            Mock mode
-          </span>
+          {is_mock && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+              Mock mode
+            </span>
+          )}
           <Button onClick={on_open_run_scan}>Run new scan</Button>
           <Button variant="destructive" onClick={logout} className="gap-1.5">
             <LogOut className="h-3.5 w-3.5" />

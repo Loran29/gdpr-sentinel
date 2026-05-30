@@ -45,6 +45,9 @@ export type Finding = {
     | "incident_report"
     | "supplier_onboarding"
     | "training_evaluation"
+    | "medical_record"
+    | "financial_authorization"
+    | "internal_memo"
     | "unknown";
   sensitivity_level: "high" | "medium" | "low";
   entities: Entity[];
@@ -57,8 +60,6 @@ export type Finding = {
   scan_timestamp: string;
   review_status:
     | "pending"
-    | "confirmed_business_need"
-    | "acknowledged_cleanup"
     | "kept_business_need"
     | "marked_false_positive"
     | "deleted";
@@ -134,8 +135,6 @@ export type AuditEntry = {
   review_note: string;
   resulting_status:
     | "pending"
-    | "confirmed_business_need"
-    | "acknowledged_cleanup"
     | "kept_business_need"
     | "marked_false_positive"
     | "deleted";

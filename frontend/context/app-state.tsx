@@ -34,7 +34,7 @@ const SELECTED_USER_STORAGE_KEY = "gdpr_sentinel_selected_user_id";
 
 type ApplyActionPayload = {
   finding_id: string;
-  review_status: "confirmed_business_need" | "acknowledged_cleanup" | "delete";
+  review_status: "keep_business_need" | "mark_false_positive" | "delete";
   review_note: string;
   confirm?: boolean;
 };
@@ -232,11 +232,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         });
       } else {
         resulting_status =
-          review_status === "confirmed_business_need"
-            ? "confirmed_business_need"
+          review_status === "keep_business_need"
+            ? "kept_business_need"
             : review_status === "delete"
               ? "deleted"
-              : "acknowledged_cleanup";
+              : "marked_false_positive";
 
         set_findings((current_findings) =>
           current_findings.map((finding) => {
@@ -269,11 +269,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           file_name: target_file_name,
           user: selected_user.name,
           action:
-            review_status === "confirmed_business_need"
-              ? "Confirmed business need"
+            review_status === "keep_business_need"
+              ? "Kept: business need"
               : review_status === "delete"
                 ? "Deleted"
-                : "Acknowledged cleanup",
+                : "Marked false positive",
           review_note,
           resulting_status
         };

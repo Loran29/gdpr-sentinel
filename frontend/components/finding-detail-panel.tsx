@@ -19,7 +19,7 @@ export function FindingDetailPanel({
   preview_url?: string;
   on_apply_action: (
     finding_id: string,
-    review_status: "confirmed_business_need" | "acknowledged_cleanup" | "delete",
+    review_status: "keep_business_need" | "mark_false_positive" | "delete",
     review_note: string
   ) => void;
 }) {
@@ -138,16 +138,16 @@ export function FindingDetailPanel({
             <Button
               variant="secondary"
               disabled={!note_is_valid}
-              onClick={() => on_apply_action(finding.id, "confirmed_business_need", review_note.trim())}
+              onClick={() => on_apply_action(finding.id, "keep_business_need", review_note.trim())}
             >
-              Confirm business need
+              Keep: business need
             </Button>
             <Button
               variant="outline"
               disabled={!note_is_valid}
-              onClick={() => on_apply_action(finding.id, "acknowledged_cleanup", review_note.trim())}
+              onClick={() => on_apply_action(finding.id, "mark_false_positive", review_note.trim())}
             >
-              Acknowledge cleanup
+              Mark false positive
             </Button>
           </div>
         </div>

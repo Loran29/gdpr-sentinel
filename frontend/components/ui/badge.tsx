@@ -10,7 +10,7 @@ export function Badge({
 }: HTMLAttributes<HTMLSpanElement> & { variant?: BadgeVariant }) {
   const variant_class =
     variant === "default"
-      ? "border-slate-300 bg-slate-100 text-slate-800"
+      ? "border-slate-400 bg-slate-100 text-slate-700"
       : variant === "secondary"
         ? "border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
         : "border-border_grey bg-card_bg text-text_dark";

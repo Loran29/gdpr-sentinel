@@ -436,7 +436,7 @@ export async function submit_finding_action(
     }
 
     const mapped_status =
-      mapped_action === "keep_business_need" ? "confirmed_business_need" : "acknowledged_cleanup";
+      mapped_action === "keep_business_need" ? "kept_business_need" : mapped_action === "delete" ? "deleted" : "marked_false_positive";
 
     return {
       ok: true,

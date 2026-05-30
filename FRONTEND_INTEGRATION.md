@@ -24,14 +24,13 @@ Employee logs in → sees only files they own that have been flagged.
 
 ### 1. Load findings for the logged-in user
 ```
-GET /findings/by-user/{user_id}?limit=50&offset=0
+GET /findings/by-user/{user_id}
 X-User-Id: u_001
 ```
-Returns `Finding[]`. Each finding is one flagged file with entities and GDPR reasoning.
+Returns `Finding[]`. Each finding is one flagged file with entities and GDPR reasoning. Returns all findings for the user (max 100) — pagination is intentionally out of scope.
 
 **Optional filters:**
 - `?status=pending` — only unreviewed
-- `?limit=20&offset=20` — pagination
 
 ### 2. Open a single finding
 ```
@@ -45,13 +44,26 @@ GET /files/{file_id}/preview
 ```
 Returns raw `application/pdf` bytes. Use inside `<embed src="..." type="application/pdf">`.
 
-### 4. Get a human-readable summary
+### 4. Re-scan a file
+```
+POST /files/{file_id}/rescan
+```
+Forces an immediate re-scan of a single file, bypassing the delta-scan cache. Use this if the LLM classification looks wrong and the reviewer wants a fresh result.
+
+Returns:
+```json
+{ "file_id": "file_001", "rescanned": true, "has_findings": true }
+```
+
+Show a "Re-scan" button on the finding detail panel. Refresh the finding after it returns.
+
+### 5. Get a human-readable summary
 ```
 GET /files/{file_id}/summary
 ```
 Returns a plain-English paragraph describing what was found. Good for the review sheet header.
 
-### 5. Take action on a finding (the core user action)
+### 6. Take action on a finding (the core user action)
 ```
 POST /findings/{finding_id}/action
 X-User-Id: u_001
@@ -75,7 +87,7 @@ POST /findings/{finding_id}/action?confirm=true
 
 Returns updated `Finding` on success. The row should disappear from the list.
 
-### 6. Bulk action (optional, for "select all + mark false positive")
+### 7. Bulk action (optional, for "select all + mark false positive")
 ```
 POST /findings/batch-action
 X-User-Id: u_001
@@ -177,6 +189,42 @@ GET /admin/retention
 Returns `{ past_deadline: [...], expiring_within_1_year: [...], compliant: [...] }`.  
 `past_deadline` items should be highlighted in red — these are GDPR Art. 5(1)(e) violations.
 
+### Notify owners of overdue files
+```
+POST /admin/retention/notify
+Content-Type: application/json
+
+{ "dry_run": true, "include_expiring_soon": false }
+```
+
+- `dry_run: true` — simulate only, nothing is sent (use this to preview the list before confirming)
+- `include_expiring_soon: true` — also include files expiring within 1 year, not just already past deadline
+
+Returns:
+```json
+{ "dry_run": true, "notified": [...], "total": 3 }
+```
+
+Show the `notified` list to the user before they confirm. Then re-POST with `"dry_run": false` to trigger actual notifications.
+
+### Graph connector status
+```
+GET /connectors/graph/test
+```
+Returns the status of the Microsoft Graph integration. Always returns `"status": "stub"` in this prototype — it never connects to anything real.
+
+```json
+{
+  "status": "stub",
+  "message": "GraphConnector is implemented as a stub...",
+  "would_connect_to": "https://graph.microsoft.com/v1.0/users/{userId}/drive/root/children",
+  "required_permissions": ["Files.Read.All", "Sites.Read.All", "User.Read.All"],
+  "sdk_package": "msgraph-sdk or msal + httpx"
+}
+```
+
+Display in an "Infrastructure" or "Connectors" section of the Admin view.
+
 ### Audit log
 ```
 GET /admin/audit?limit=50&offset=0
@@ -270,7 +318,7 @@ medical_record, financial_authorization, internal_memo, unknown
 | `low` | Green |
 
 ### Entity type badges
-All caps strings: `PERSON_NAME`, `EMPLOYEE_ID`, `DEPARTMENT`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `POSTAL_ADDRESS`, `ORGANIZATION_NAME`, `GERMAN_VAT_ID`, `IBAN`, `FINANCIAL_AMOUNT`, `SYSTEM_IDENTIFIER`
+All caps strings: `PERSON_NAME`, `EMPLOYEE_ID`, `DEPARTMENT`, `JOB_TITLE`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `POSTAL_ADDRESS`, `POSTAL_CODE`, `ORGANIZATION_NAME`, `GERMAN_VAT_ID`, `IBAN`, `DATE`, `FINANCIAL_AMOUNT`, `LOCATION`, `SYSTEM_IDENTIFIER`, `OTHER`
 
 ### Review status display
 | Status | Display |
