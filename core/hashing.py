@@ -17,10 +17,10 @@ def _normalize_entity(entity: dict) -> dict:
     return {
         "type": entity.get("type"),
         "value": entity.get("value"),
-        "context": entity.get("context"),
         "detector": entity.get("detector"),
-        # confidence intentionally excluded — Presidio scores can drift between
-        # spaCy minor releases. Type+value+detector identifies the entity.
+        # context intentionally excluded — LLM-generated context strings vary
+        # between calls even at temperature=0. type+value+detector is the stable
+        # identity of an entity across runs.
     }
 
 

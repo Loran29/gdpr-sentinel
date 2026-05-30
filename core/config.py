@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     openrouter_api_key: str = ""
-    openrouter_model: str = "anthropic/claude-3.7-sonnet"
+    openrouter_model: str = "anthropic/claude-sonnet-4.5"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
     data_root: str = "./data"
     master_of_data_config: str = "./master_of_data.yaml"

@@ -92,7 +92,7 @@ def _build_analyzer():
         logger.warning("spaCy models missing (%s) — regex-only mode", exc)
         return None
 
-    registry = RecognizerRegistry()
+    registry = RecognizerRegistry(supported_languages=["en", "de"])
     registry.load_predefined_recognizers(languages=["en", "de"])
 
     analyzer = AnalyzerEngine(

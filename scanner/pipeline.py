@@ -319,6 +319,10 @@ def _scan_one_file(
             )
 
     # Hash payload — must be stable across runs.
+    # Only include entities from deterministic detectors (presidio/regex).
+    # LLM additional_entities are probabilistic extras that vary across API calls
+    # even at temperature=0 due to OpenRouter proxy non-determinism.
+    deterministic_entities = [e for e in merged if e["detector"] != "llm"]
     return {
         "file_path": fm.path,
         "file_sha256": sha,
@@ -327,7 +331,7 @@ def _scan_one_file(
         "owner_type": owner_type,
         "owner_user_id": owner_user_id,
         "master_of_data_id": master_of_data_id,
-        "entities": merged,
+        "entities": deterministic_entities,
     }
 
 

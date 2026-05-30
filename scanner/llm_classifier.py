@@ -95,16 +95,25 @@ def _get_client():
 # ---------------------------------------------------------------------------
 
 
+_live_mode_logged = False
+
+
 def classify(text: str, presidio_entities: list[PresidioEntity], filename_hint: str = "") -> dict:
     """Classify a document. Returns a dict matching the LLM schema."""
+    global _live_mode_logged
     settings = get_settings()
     if not settings.has_llm:
-        logger.warning("OPENROUTER_API_KEY not set — using stub classifier")
+        logger.warning("LLM stub mode active (no OPENROUTER_API_KEY)")
         return _stub_classify(text, presidio_entities, filename_hint)
 
     client = _get_client()
     if client is None:
+        logger.warning("LLM stub mode active (client init failed)")
         return _stub_classify(text, presidio_entities, filename_hint)
+
+    if not _live_mode_logged:
+        logger.info("LLM live mode active (model=%s)", settings.openrouter_model)
+        _live_mode_logged = True
 
     user_message = _build_user_message(text, presidio_entities)
 
@@ -115,6 +124,7 @@ def classify(text: str, presidio_entities: list[PresidioEntity], filename_hint: 
         response = client.chat.completions.create(
             model=settings.openrouter_model,
             temperature=0,
+            seed=42,
             max_tokens=1024,
             messages=[
                 {"role": "system", "content": system},
