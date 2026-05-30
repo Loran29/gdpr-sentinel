@@ -151,7 +151,7 @@ export function AdminDashboardPage() {
           <CardHeader>
             <CardTitle>Findings by document type</CardTitle>
           </CardHeader>
-          <CardContent className="rounded-lg border border-border_grey/70 bg-slate-50 p-2 dark:bg-slate-800/50">
+          <CardContent className="rounded-lg border border-border_grey/70 bg-page_bg p-2 dark:bg-slate-900/60">
             <DocumentTypeBarChart data={document_type_data} />
           </CardContent>
         </Card>
@@ -160,7 +160,7 @@ export function AdminDashboardPage() {
           <CardHeader>
             <CardTitle>Sensitivity distribution</CardTitle>
           </CardHeader>
-          <CardContent className="rounded-lg border border-border_grey/70 bg-slate-50 p-2 dark:bg-slate-800/50">
+          <CardContent className="rounded-lg border border-border_grey/70 bg-page_bg p-2 dark:bg-slate-900/60">
             <SensitivityChart data={sensitivity_data} />
           </CardContent>
         </Card>
