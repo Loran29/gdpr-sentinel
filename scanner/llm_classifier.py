@@ -54,7 +54,7 @@ You receive: (1) the text of one document, (2) a list of entities already detect
 
 Your job: return ONLY a JSON object with this exact shape:
 {
-  "document_type": "expense_report" | "it_access_request" | "incident_report" | "supplier_onboarding" | "training_evaluation" | "medical_record" | "financial_authorization" | "unknown",
+  "document_type": "expense_report" | "it_access_request" | "incident_report" | "supplier_onboarding" | "training_evaluation" | "medical_record" | "financial_authorization" | "internal_memo" | "unknown",
   "sensitivity_level": "high" | "medium" | "low",
   "reasoning": "<2-4 sentences explaining the GDPR relevance, citing the specific personal data found and the most relevant legal basis (Art. 6 GDPR sub-clause, German retention obligation if applicable)>",
   "retention_recommendation": "<one sentence with concrete retention period and trigger event>",
@@ -67,7 +67,7 @@ Rules:
 - Use ONLY these entity types: PERSON_NAME, EMPLOYEE_ID, DEPARTMENT, JOB_TITLE, EMAIL_ADDRESS, PHONE_NUMBER, POSTAL_ADDRESS, POSTAL_CODE, ORGANIZATION_NAME, GERMAN_VAT_ID, IBAN, DATE, FINANCIAL_AMOUNT, LOCATION, SYSTEM_IDENTIFIER, OTHER.
 - Only include entities in `additional_entities` that the deterministic recognizers MISSED. Do not duplicate.
 - `sensitivity_level`: high = contains direct personal identifiers (name + ID, name + financial, name + health); medium = contains personal data but lower stakes (training, B2B contact); low = minimal or only indirect personal data.
-- `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions.
+- `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions; use "internal_memo" for internal communications, memos, announcements, and bilingual corporate notices.
 - `reasoning` MUST reference at least one specific entity value from the document. Generic reasoning is rejected.
 - Output ONLY the JSON. No prose, no markdown fences, no preamble."""
 
@@ -265,6 +265,8 @@ _STUB_BY_FILENAME = [
     ("medical_record", "medical"),
     ("financial_authorization", "bank_authorization"),
     ("financial_authorization", "sepa"),
+    ("internal_memo", "memo"),
+    ("internal_memo", "internal_memo"),
 ]
 
 _STUB_REASONING = {
@@ -275,6 +277,7 @@ _STUB_REASONING = {
     "training_evaluation": "Training feedback record containing the participant's name and free-text comments; processed under GDPR Art. 6(1)(f) (legitimate interest in training records).",
     "medical_record": "Medical certificate containing patient name and date of birth; classified as special category data under GDPR Art. 9(2)(b) (employment law obligations). Strict access controls apply.",
     "financial_authorization": "Bank authorization containing name, IBAN, and postal address of the account holder; processed under GDPR Art. 6(1)(b) (contractual necessity). Retain per §147 AO.",
+    "internal_memo": "Internal communication containing employee names and contact details; processed under GDPR Art. 6(1)(f) (legitimate interest in internal communication). Standard retention applies.",
     "unknown": "Document could not be classified automatically; manual review recommended.",
 }
 
@@ -286,6 +289,7 @@ _STUB_RETENTION = {
     "training_evaluation": "Retain 2 years for HR records, then delete.",
     "medical_record": "Retain for duration of employment plus 3 years per §5 EFZG, then delete.",
     "financial_authorization": "Retain 10 years from last transaction per §147 AO, then delete.",
+    "internal_memo": "Retain 3 years for business records, then review and delete if no longer relevant.",
     "unknown": "Manual review required.",
 }
 
@@ -297,6 +301,7 @@ _STUB_SENSITIVITY = {
     "training_evaluation": "low",
     "medical_record": "high",
     "financial_authorization": "high",
+    "internal_memo": "medium",
     "unknown": "low",
 }
 

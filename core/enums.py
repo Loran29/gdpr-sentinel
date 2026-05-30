@@ -15,6 +15,7 @@ class DocumentType(str, Enum):
     TRAINING_EVALUATION = "training_evaluation"
     MEDICAL_RECORD = "medical_record"
     FINANCIAL_AUTHORIZATION = "financial_authorization"
+    INTERNAL_MEMO = "internal_memo"
     UNKNOWN = "unknown"
 
 

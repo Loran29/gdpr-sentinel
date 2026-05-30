@@ -7,6 +7,7 @@ Run:
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -20,6 +21,9 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+
+# Module-level start time — used by /admin/health to compute uptime.
+_SERVER_START = time.perf_counter()
 
 
 @asynccontextmanager

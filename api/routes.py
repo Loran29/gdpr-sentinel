@@ -24,8 +24,11 @@ from api.schemas import (
     EntityOut,
     FindingActionRequest,
     FindingOut,
+    HealthDetailOut,
     OwnerSummaryOut,
     RecentScanOut,
+    RetentionFileOut,
+    RetentionSummaryOut,
     ScanDeltaResponse,
     ScanOut,
     ScanProgress,
@@ -62,6 +65,42 @@ router = APIRouter()
 @router.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@router.get("/admin/health", response_model=HealthDetailOut)
+def health_detail(db: Session = Depends(get_db)) -> HealthDetailOut:
+    """Live resource intensity metrics — CPU, RAM, uptime, cache, DB counts."""
+    import sys
+    import time
+    from pathlib import Path
+
+    import psutil
+
+    from main import _SERVER_START
+
+    proc = psutil.Process()
+    rss_mb = proc.memory_info().rss / 1024 ** 2
+    cpu_count = psutil.cpu_count(logical=False) or 1
+
+    cache_entries = len(list(Path(".llm_cache").glob("*.json"))) if Path(".llm_cache").exists() else 0
+
+    from db.models import File, Finding, Scan
+    db_findings = db.execute(select(func.count()).select_from(Finding)).scalar_one()
+    db_files    = db.execute(select(func.count()).select_from(File)).scalar_one()
+    db_scans    = db.execute(select(func.count()).select_from(Scan)).scalar_one()
+
+    return HealthDetailOut(
+        status="ok",
+        uptime_sec=round(time.perf_counter() - _SERVER_START, 1),
+        rss_mb=round(rss_mb, 1),
+        cpu_count=cpu_count,
+        python_version=sys.version.split()[0],
+        model=get_settings().openrouter_model,
+        llm_cache_entries=cache_entries,
+        db_findings=int(db_findings),
+        db_files=int(db_files),
+        db_scans=int(db_scans),
+    )
 
 
 @router.get("/users", response_model=list[UserOut])
@@ -434,8 +473,11 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     RETENTION_YEARS = {
         "expense_report": 10,
         "supplier_onboarding": 10,
+        "financial_authorization": 10,
         "incident_report": 5,
         "it_access_request": 5,
+        "medical_record": 3,
+        "internal_memo": 3,
         "training_evaluation": 2,
     }
     now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -501,6 +543,107 @@ def _read_latest_eval_metrics() -> tuple[float, float, float]:
 # ---------------------------------------------------------------------------
 # Owners table
 # ---------------------------------------------------------------------------
+
+
+@router.get("/admin/retention", response_model=RetentionSummaryOut)
+def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
+    """Group all pending findings by retention status.
+
+    Retention periods by document type (years after scan_timestamp):
+      expense_report / supplier_onboarding / financial_authorization: 10
+      incident_report / it_access_request: 5
+      medical_record / internal_memo: 3
+      training_evaluation: 2
+    """
+    RETENTION_YEARS_MAP = {
+        "expense_report": 10,
+        "supplier_onboarding": 10,
+        "financial_authorization": 10,
+        "incident_report": 5,
+        "it_access_request": 5,
+        "medical_record": 3,
+        "internal_memo": 3,
+        "training_evaluation": 2,
+    }
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    one_year_from_now = now.replace(year=now.year + 1)
+
+    # Pull one finding per file (latest) with file info.
+    findings = db.execute(
+        select(Finding, File)
+        .join(File, File.id == Finding.file_id)
+        .where(Finding.review_status == "pending")
+        .order_by(Finding.scan_timestamp.desc())
+    ).all()
+
+    # Deduplicate to one finding per file.
+    seen_files: set[str] = set()
+    unique: list[tuple] = []
+    for f, fl in findings:
+        if fl.id not in seen_files:
+            seen_files.add(fl.id)
+            unique.append((f, fl))
+
+    past: list[RetentionFileOut] = []
+    expiring: list[RetentionFileOut] = []
+    compliant: list[RetentionFileOut] = []
+
+    for f, fl in unique:
+        years = RETENTION_YEARS_MAP.get(f.document_type, 3)
+        deadline = f.scan_timestamp.replace(
+            year=f.scan_timestamp.year + years
+        )
+
+        owner_name: Optional[str] = None
+        if f.owner_user_id:
+            u = db.execute(select(User).where(User.id == f.owner_user_id)).scalar_one_or_none()
+            if u:
+                owner_name = u.name
+        elif f.master_of_data_id:
+            mod = db.execute(
+                select(MasterOfData).where(MasterOfData.id == f.master_of_data_id)
+            ).scalar_one_or_none()
+            if mod:
+                u = db.execute(select(User).where(User.id == mod.user_id)).scalar_one_or_none()
+                if u:
+                    owner_name = u.name
+
+        days_overdue = int((now - deadline).days) if deadline < now else None
+
+        item = RetentionFileOut(
+            file_id=fl.id,
+            file_name=fl.name,
+            file_path=fl.path,
+            document_type=f.document_type,
+            sensitivity_level=f.sensitivity_level,
+            scan_timestamp=f.scan_timestamp,
+            retention_years=years,
+            deadline_date=deadline,
+            days_overdue=days_overdue,
+            owner_user_id=f.owner_user_id,
+            owner_name=owner_name,
+            review_status=f.review_status,
+        )
+
+        if deadline < now:
+            past.append(item)
+        elif deadline < one_year_from_now:
+            expiring.append(item)
+        else:
+            compliant.append(item)
+
+    # Sort past_deadline by most overdue first.
+    past.sort(key=lambda x: x.days_overdue or 0, reverse=True)
+
+    return RetentionSummaryOut(
+        past_deadline=past,
+        expiring_within_1_year=expiring,
+        compliant=compliant,
+        total_past_deadline=len(past),
+        total_expiring_soon=len(expiring),
+        total_compliant=len(compliant),
+    )
 
 
 @router.get("/admin/owners", response_model=list[OwnerSummaryOut])

@@ -133,6 +133,55 @@ class StageTiming(BaseModel):
     db_ms: float = 0.0
 
 
+class HealthDetailOut(BaseModel):
+    status: str
+    uptime_sec: float
+    rss_mb: float
+    cpu_count: int
+    python_version: str
+    model: str
+    llm_cache_entries: int
+    db_findings: int
+    db_files: int
+    db_scans: int
+
+
+class RetentionFileOut(BaseModel):
+    file_id: str
+    file_name: str
+    file_path: str
+    document_type: str
+    sensitivity_level: str
+    scan_timestamp: datetime
+    retention_years: int
+    deadline_date: datetime
+    days_overdue: Optional[int] = None
+    owner_user_id: Optional[str] = None
+    owner_name: Optional[str] = None
+    review_status: str
+    file_id: str
+    file_name: str
+    file_path: str
+    document_type: str
+    sensitivity_level: str
+    scan_timestamp: datetime
+    retention_years: int
+    deadline_date: datetime
+    days_overdue: Optional[int] = None
+    owner_user_id: Optional[str] = None
+    owner_name: Optional[str] = None
+    review_status: str
+
+
+class RetentionSummaryOut(BaseModel):
+    past_deadline: list[RetentionFileOut]
+    expiring_within_1_year: list[RetentionFileOut]
+    compliant: list[RetentionFileOut]
+    total_past_deadline: int
+    total_expiring_soon: int
+    total_compliant: int
+
+
 class DashboardStatsOut(_Base):
     total_files_scanned: int
     total_size_bytes: int
