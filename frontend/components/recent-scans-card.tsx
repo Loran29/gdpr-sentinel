@@ -23,7 +23,7 @@ export function RecentScansCard({ recent_scans }: { recent_scans: DashboardStats
           </TableHeader>
           <TableBody>
             {recent_scans.map((scan) => (
-              <TableRow key={scan.id} className="hover:bg-slate-50/80 dark:bg-slate-800/50">
+              <TableRow key={scan.id} className="hover:bg-page_bg dark:bg-slate-800/50">
                 <TableCell className="font-mono text-[13px]">{scan.id}</TableCell>
                 <TableCell className="font-mono text-[13px]">{scan.scan_type ?? "full"}</TableCell>
                 <TableCell className="font-mono text-[13px]">{scan.completed_at}</TableCell>

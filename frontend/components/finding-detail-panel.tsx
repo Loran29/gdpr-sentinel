@@ -50,7 +50,7 @@ export function FindingDetailPanel({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
+        <div className="rounded-lg border border-border_grey bg-page_bg p-3 dark:bg-slate-800/50">
           <table className="w-full text-sm">
             <tbody>
               {[
@@ -101,12 +101,12 @@ export function FindingDetailPanel({
 
         <Separator />
 
-        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
+        <div className="rounded-lg border border-border_grey bg-page_bg p-3 dark:bg-slate-800/50">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">Reasoning</p>
           <p className="text-sm text-text_dark">{finding.reasoning}</p>
         </div>
 
-        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
+        <div className="rounded-lg border border-border_grey bg-page_bg p-3 dark:bg-slate-800/50">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">
             Retention recommendation
           </p>
@@ -127,7 +127,7 @@ export function FindingDetailPanel({
 
         <Separator />
 
-        <div className="space-y-2 rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
+        <div className="space-y-2 rounded-lg border border-border_grey bg-page_bg p-3 dark:bg-slate-800/50">
           <p className="text-xs font-semibold uppercase tracking-wide text-text_medium">Review note</p>
           <Textarea
             placeholder="Add context before applying review action"
