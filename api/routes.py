@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Query, Response
@@ -421,6 +421,32 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         except Exception:  # noqa: BLE001
             pass
 
+    # Files past their GDPR retention period — keyed on document type.
+    RETENTION_YEARS = {
+        "expense_report": 10,
+        "supplier_onboarding": 10,
+        "incident_report": 5,
+        "it_access_request": 5,
+        "training_evaluation": 2,
+    }
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    files_past_retention = 0
+    for doc_type, years in RETENTION_YEARS.items():
+        cutoff = now - timedelta(days=365 * years)
+        count = (
+            db.execute(
+                select(func.count())
+                .select_from(Finding)
+                .where(
+                    Finding.document_type == doc_type,
+                    Finding.scan_timestamp < cutoff,
+                    Finding.review_status == "pending",
+                )
+            ).scalar_one()
+            or 0
+        )
+        files_past_retention += int(count)
+
     return DashboardStatsOut(
         total_files_scanned=int(total_files or 0),
         total_size_bytes=int(total_size or 0),
@@ -437,6 +463,7 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         findings_by_sensitivity=by_sens,
         recent_scans=recent,
         last_scan_timing_breakdown=timing_breakdown,
+        files_past_retention=files_past_retention,
     )
 
 

@@ -54,6 +54,8 @@ CUSTOM_REGEX_RECOGNIZERS = [
     (EntityType.FINANCIAL_AMOUNT.value, re.compile(r"\b\d+[.,]\d{2}\s*EUR\b"), 1.0),
     # Postal code with a following capitalized word (city) — looser is too noisy.
     (EntityType.POSTAL_CODE.value, re.compile(r"\b\d{5}\b(?=\s+[A-ZÄÖÜ])"), 0.85),
+    # German phone numbers: +49 or 0 prefix, various formats.
+    (EntityType.PHONE_NUMBER.value, re.compile(r"\+49[\s\-]?[\d][\d\s\-]{6,14}\d|\b0\d{2,4}[\s\-\/]?\d{3,}[\d\s\-]{2,}"), 0.9),
 ]
 
 
@@ -142,6 +144,11 @@ def analyze(text: str, language: str = "en") -> list[PresidioEntity]:
         try:
             results = analyzer.analyze(text=text, language=language)
             for r in results:
+                # Per-type confidence thresholds.
+                # Phone numbers score lower by design in Presidio — use a relaxed floor.
+                min_score = 0.6 if r.entity_type == "PHONE_NUMBER" else 0.7
+                if r.score < min_score:
+                    continue
                 presidio_type = r.entity_type
                 mapped = PRESIDIO_TO_ENUM.get(presidio_type)
                 if mapped is None:

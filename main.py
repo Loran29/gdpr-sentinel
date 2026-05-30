@@ -25,6 +25,8 @@ logging.basicConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     init_db()
+    from scanner.presidio_scanner import _get_analyzer
+    _get_analyzer()  # warm up spaCy models so first scan request is not slow
     yield
 
 

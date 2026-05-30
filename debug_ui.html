@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GDPR Sentinel — Debug UI</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    background: #f4f5f7;
+    color: #1a1a2e;
+    padding: 24px 16px;
+  }
+
+  .page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+
+  h1 { font-size: 20px; font-weight: 700; color: #1a1a2e; }
+  h1 span { color: #6b7280; font-weight: 400; font-size: 14px; margin-left: 8px; }
+
+  section {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+
+  section > h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  label { font-weight: 500; margin-right: 8px; }
+
+  select {
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  button {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+  }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn-primary { background: #2563eb; color: #fff; }
+  .btn-danger  { background: #dc2626; color: #fff; }
+  .btn-gray    { background: #e5e7eb; color: #374151; }
+  .btn-sm      { padding: 4px 10px; font-size: 12px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    padding: 8px 12px;
+    border-bottom: 1px solid #e5e7eb;
+  }
+  tbody tr:hover { background: #f9fafb; }
+  tbody tr { cursor: pointer; }
+  tbody tr.no-hover { cursor: default; }
+  tbody tr.no-hover:hover { background: none; }
+  td { padding: 9px 12px; border-bottom: 1px solid #f3f4f6; vertical-align: top; }
+
+  /* Sensitivity badges */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .badge-high   { background: #fee2e2; color: #991b1b; }
+  .badge-medium { background: #fef3c7; color: #92400e; }
+  .badge-low    { background: #d1fae5; color: #065f46; }
+
+  /* Review status badges */
+  .status-pending              { color: #6b7280; }
+  .status-deleted              { color: #dc2626; text-decoration: line-through; }
+  .status-marked_false_positive { color: #d97706; }
+  .status-kept_business_need   { color: #059669; }
+
+  /* Inline detail row */
+  .detail-row td {
+    background: #f8fafc;
+    border-bottom: 2px solid #e5e7eb;
+    padding: 14px 16px;
+  }
+  .detail-row .reasoning {
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.5;
+    margin-bottom: 12px;
+  }
+  .entity-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+  .entity-chip {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+    color: #1d4ed8;
+  }
+  .entity-chip span { color: #6b7280; font-size: 11px; margin-left: 4px; }
+  .action-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* KPI grid */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .kpi-card.kpi-warn {
+    background: #fff7ed;
+    border-color: #fb923c;
+  }
+  .kpi-card.kpi-warn .kpi-value { color: #c2410c; }
+  .kpi-card .kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    margin-bottom: 4px;
+  }
+  .kpi-card .kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a2e;
+  }
+
+  .sub-heading {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6b7280;
+    margin: 16px 0 8px;
+  }
+
+  ul.bullet { padding-left: 18px; list-style: disc; }
+  ul.bullet li { padding: 2px 0; color: #374151; }
+
+  .timing-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .timing-item {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 6px;
+    padding: 8px 14px;
+    min-width: 110px;
+  }
+  .timing-item .t-label {
+    font-size: 11px;
+    color: #6b7280;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .timing-item .t-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #15803d;
+  }
+
+  /* Progress */
+  .progress-wrap {
+    margin-top: 12px;
+    display: none;
+  }
+  .progress-wrap.active { display: block; }
+  .progress-bar-outer {
+    height: 12px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .progress-bar-inner {
+    height: 100%;
+    background: #2563eb;
+    border-radius: 999px;
+    transition: width 0.3s;
+  }
+  .progress-meta { font-size: 12px; color: #6b7280; }
+
+  .row-actions { display: flex; gap: 8px; align-items: center; }
+  .empty { color: #9ca3af; font-style: italic; padding: 16px 0; text-align: center; }
+  .error-msg { color: #dc2626; font-size: 13px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>GDPR Sentinel <span>Debug UI — localhost:8000</span></h1>
+
+  <!-- ===== SECTION 1: USER PICKER ===== -->
+  <section id="sec-user">
+    <h2>User</h2>
+    <div>
+      <label for="user-select">Active user (X-User-Id)</label>
+      <select id="user-select"></select>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 2: MY FLAGGED FILES ===== -->
+  <section id="sec-findings">
+    <h2>
+      My Flagged Files
+      <span id="findings-count" style="font-weight:400;color:#6b7280;font-size:13px;"></span>
+    </h2>
+    <div id="findings-container">
+      <div class="empty">Select a user to load findings.</div>
+    </div>
+  </section>
+
+  <!-- ===== SECTION 3: ADMIN DASHBOARD ===== -->
+  <section id="sec-admin">
+    <h2>
+      Admin Dashboard
+      <div class="row-actions" style="margin-left:auto">
+        <button class="btn-gray" id="btn-refresh">Refresh</button>
+        <button class="btn-primary" id="btn-scan">Run new scan</button>
+      </div>
+    </h2>
+
+    <div class="progress-wrap" id="scan-progress">
+      <div class="progress-bar-outer">
+        <div class="progress-bar-inner" id="progress-bar" style="width:0%"></div>
+      </div>
+      <div class="progress-meta" id="progress-meta">Starting scan…</div>
+    </div>
+
+    <div id="dashboard-container">
+      <div class="empty">Click Refresh to load dashboard data.</div>
+    </div>
+
+    <div class="sub-heading" style="margin-top:24px">Owners</div>
+    <div id="owners-container">
+      <div class="empty">Click Refresh to load owners.</div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+let currentUserId = null;
+let pollTimer = null;
+
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function headers() {
+  const h = { 'Content-Type': 'application/json' };
+  if (currentUserId) h['X-User-Id'] = currentUserId;
+  return h;
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(API + path, { headers: headers(), ...opts });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function sensitivityBadge(level) {
+  const cls = { high: 'badge-high', medium: 'badge-medium', low: 'badge-low' }[level] || 'badge-low';
+  return `<span class="badge ${cls}">${level}</span>`;
+}
+
+function statusLabel(status) {
+  return `<span class="status-${status}">${status.replace(/_/g, ' ')}</span>`;
+}
+
+function fmtBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+// ── Section 1: User picker ────────────────────────────────────────────────────
+
+async function loadUsers() {
+  const sel = document.getElementById('user-select');
+  try {
+    const users = await apiFetch('/users');
+    sel.innerHTML = users.map(u =>
+      `<option value="${u.id}">${u.name} (${u.id}) — ${u.department}${u.is_master_of_data ? ' ★' : ''}</option>`
+    ).join('');
+    currentUserId = users[0]?.id || null;
+    sel.value = currentUserId;
+    loadFindings();
+  } catch (e) {
+    sel.innerHTML = '<option>Failed to load users</option>';
+    console.error(e);
+  }
+}
+
+document.getElementById('user-select').addEventListener('change', function() {
+  currentUserId = this.value;
+  loadFindings();
+});
+
+// ── Section 2: Findings ───────────────────────────────────────────────────────
+
+async function loadFindings() {
+  if (!currentUserId) return;
+  const container = document.getElementById('findings-container');
+  const countEl = document.getElementById('findings-count');
+  container.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const findings = await apiFetch(`/findings/by-user/${currentUserId}`);
+    countEl.textContent = findings.length ? `(${findings.length})` : '';
+    if (!findings.length) {
+      container.innerHTML = '<div class="empty">No findings for this user.</div>';
+      return;
+    }
+    container.innerHTML = renderFindingsTable(findings);
+    attachFindingListeners();
+  } catch (e) {
+    container.innerHTML = `<div class="error-msg">Error: ${e.message}</div>`;
+  }
+}
+
+function renderFindingsTable(findings) {
+  const rows = findings.map(f => `
+    <tr class="finding-row" data-id="${f.id}" data-file-id="${f.file_id}">
+      <td>${escHtml(f.file_name)}</td>
+      <td>${escHtml(f.document_type.replace(/_/g, ' '))}</td>
+      <td>${sensitivityBadge(f.sensitivity_level)}</td>
+      <td>${f.entities.length}</td>
+      <td>${statusLabel(f.review_status)}</td>
+    </tr>
+    <tr class="detail-row" id="detail-${f.id}" style="display:none">
+      <td colspan="5">
+        <div class="reasoning">${escHtml(f.reasoning)}</div>
+        <div class="entity-list">
+          ${f.entities.map(e => `<div class="entity-chip">${escHtml(e.type)}: ${escHtml(e.value)}<span>${(e.confidence * 100).toFixed(0)}%</span></div>`).join('')}
+        </div>
+        <div class="action-row">
+          <button class="btn-danger btn-sm" data-action="delete" data-id="${f.id}">Delete file</button>
+          <button class="btn-gray btn-sm" data-action="keep_business_need" data-id="${f.id}">Keep — business need</button>
+          <button class="btn-gray btn-sm" data-action="mark_false_positive" data-id="${f.id}">Mark as false positive</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  return `<table>
+    <thead>
+      <tr>
+        <th>File</th><th>Document type</th><th>Sensitivity</th><th>Entities</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function attachFindingListeners() {
+  document.querySelectorAll('.finding-row').forEach(row => {
+    row.addEventListener('click', function() {
+      const id = this.dataset.id;
+      const detail = document.getElementById(`detail-${id}`);
+      const isOpen = detail.style.display !== 'none';
+      // Close all others
+      document.querySelectorAll('.detail-row').forEach(d => d.style.display = 'none');
+      if (!isOpen) detail.style.display = '';
+    });
+  });
+
+  document.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', async function(e) {
+      e.stopPropagation();
+      const action = this.dataset.action;
+      const id = this.dataset.id;
+      await doAction(id, action, this);
+    });
+  });
+}
+
+async function doAction(findingId, action, btn) {
+  if (action === 'delete') {
+    if (!confirm('Permanently delete this file from disk?')) return;
+  }
+  btn.disabled = true;
+  const url = `/findings/${findingId}/action` + (action === 'delete' ? '?confirm=true' : '');
+  try {
+    await apiFetch(url, {
+      method: 'POST',
+      body: JSON.stringify({ action }),
+    });
+    // Remove the finding row and its detail row
+    const row = document.querySelector(`.finding-row[data-id="${findingId}"]`);
+    const detail = document.getElementById(`detail-${findingId}`);
+    row?.remove();
+    detail?.remove();
+    // Update count
+    const remaining = document.querySelectorAll('.finding-row').length;
+    document.getElementById('findings-count').textContent = remaining ? `(${remaining})` : '';
+    if (!remaining) {
+      document.getElementById('findings-container').innerHTML = '<div class="empty">No more findings for this user.</div>';
+    }
+  } catch (e) {
+    alert(`Action failed: ${e.message}`);
+    btn.disabled = false;
+  }
+}
+
+// ── Section 3: Dashboard ──────────────────────────────────────────────────────
+
+async function loadDashboard() {
+  const container = document.getElementById('dashboard-container');
+  const ownersContainer = document.getElementById('owners-container');
+  try {
+    const [dash, owners] = await Promise.all([
+      apiFetch('/admin/dashboard'),
+      apiFetch('/admin/owners'),
+    ]);
+    container.innerHTML = renderDashboard(dash);
+    ownersContainer.innerHTML = renderOwners(owners);
+  } catch (e) {
+    container.innerHTML = `<div class="error-msg">Error: ${e.message}</div>`;
+  }
+}
+
+function renderDashboard(d) {
+  const kpis = [
+    { label: 'Files scanned', value: d.total_files_scanned },
+    { label: 'Total size', value: fmtBytes(d.total_size_bytes) },
+    { label: 'With findings', value: d.files_with_findings },
+    { label: 'Total findings', value: d.total_findings },
+    { label: 'Files / sec', value: d.scan_speed_files_per_sec.toFixed(2) },
+    { label: 'Precision', value: d.precision_pct.toFixed(1) + '%' },
+    { label: 'Recall', value: d.recall_pct.toFixed(1) + '%' },
+    { label: 'F1 score', value: d.f1_score.toFixed(3) },
+    { label: 'Last scan', value: d.last_scan_duration_sec.toFixed(1) + 's' },
+    {
+      label: '⚠ Past retention',
+      value: d.files_past_retention,
+      warn: d.files_past_retention > 0,
+    },
+  ];
+
+  const kpiHtml = `<div class="kpi-grid">${kpis.map(k =>
+    `<div class="kpi-card${k.warn ? ' kpi-warn' : ''}"><div class="kpi-label">${k.label}</div><div class="kpi-value">${k.value}</div></div>`
+  ).join('')}</div>`;
+
+  const byType = Object.entries(d.findings_by_document_type)
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `<li>${k.replace(/_/g, ' ')}: <strong>${v}</strong></li>`)
+    .join('');
+
+  const byTypeSec = byType
+    ? `<div class="sub-heading">Findings by document type</div><ul class="bullet">${byType}</ul>`
+    : '';
+
+  const t = d.last_scan_timing_breakdown;
+  const timingHtml = t ? `
+    <div class="sub-heading">Last scan — stage timing</div>
+    <div class="timing-row">
+      ${['extract_ms', 'presidio_ms', 'llm_ms', 'db_ms'].map(k => `
+        <div class="timing-item">
+          <div class="t-label">${k.replace('_ms', '')}</div>
+          <div class="t-value">${t[k] ?? 0}<small style="font-size:12px;font-weight:500"> ms</small></div>
+        </div>`).join('')}
+    </div>` : '';
+
+  return kpiHtml + byTypeSec + timingHtml;
+}
+
+function renderOwners(owners) {
+  if (!owners.length) return '<div class="empty">No owners configured.</div>';
+  const rows = owners.map(o => `
+    <tr class="no-hover">
+      <td>${escHtml(o.name)}</td>
+      <td><span class="badge ${o.type === 'direct' ? 'badge-low' : 'badge-medium'}">${o.type.replace(/_/g, ' ')}</span></td>
+      <td>${o.assigned_sources.map(s => `<code style="font-size:11px;background:#f3f4f6;padding:1px 5px;border-radius:3px">${escHtml(s)}</code>`).join(' ')}</td>
+      <td>${o.files_assigned}</td>
+      <td>${o.pending_reviews}</td>
+      <td>${o.completed_reviews}</td>
+    </tr>`).join('');
+  return `<table>
+    <thead>
+      <tr><th>Name</th><th>Type</th><th>Sources</th><th>Files</th><th>Pending</th><th>Done</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── Scan progress ─────────────────────────────────────────────────────────────
+
+async function runScan() {
+  const btn = document.getElementById('btn-scan');
+  const progressWrap = document.getElementById('scan-progress');
+  const bar = document.getElementById('progress-bar');
+  const meta = document.getElementById('progress-meta');
+
+  btn.disabled = true;
+  progressWrap.classList.add('active');
+  bar.style.width = '0%';
+  meta.textContent = 'Starting scan…';
+
+  try {
+    const { scan_id } = await apiFetch('/scan/run', {
+      method: 'POST',
+      body: JSON.stringify({ source_path: './data' }),
+    });
+
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      try {
+        const scan = await apiFetch(`/scan/${scan_id}`);
+        if (scan.status === 'running' && scan.progress) {
+          const p = scan.progress;
+          bar.style.width = p.percent + '%';
+          const eta = p.estimated_remaining_sec != null
+            ? ` — ~${p.estimated_remaining_sec.toFixed(0)}s remaining`
+            : '';
+          const file = p.current_file ? ` · ${p.current_file}` : '';
+          meta.textContent = `${p.files_completed}/${p.files_total} files · ${p.elapsed_sec.toFixed(0)}s elapsed${eta}${file}`;
+        } else if (scan.status === 'completed') {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          bar.style.width = '100%';
+          meta.textContent = `Scan complete — ${scan.files_processed} files in ${scan.duration_sec.toFixed(1)}s`;
+          setTimeout(() => progressWrap.classList.remove('active'), 3000);
+          loadDashboard();
+          loadFindings();
+          btn.disabled = false;
+        }
+      } catch (e) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        meta.textContent = `Poll error: ${e.message}`;
+        btn.disabled = false;
+      }
+    }, 500);
+
+  } catch (e) {
+    meta.textContent = `Failed to start scan: ${e.message}`;
+    progressWrap.classList.remove('active');
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-refresh').addEventListener('click', loadDashboard);
+document.getElementById('btn-scan').addEventListener('click', runScan);
+
+// ── XSS safety ────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+
+loadUsers();
+loadDashboard();
+</script>
+</body>
+</html>

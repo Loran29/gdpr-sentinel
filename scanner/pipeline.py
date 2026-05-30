@@ -45,7 +45,7 @@ DEPARTMENT_BLOCKLIST = {
 
 # Entity types that are noise under GDPR when surfaced alone — detected and
 # logged internally but excluded from Findings and eval scoring.
-SUPPRESSED_TYPES = {"DATE", "JOB_TITLE"}
+SUPPRESSED_TYPES = {"DATE", "JOB_TITLE", "LOCATION", "POSTAL_CODE", "OTHER"}
 
 
 def _filter_entities(entities: list, text: str, document_type: str) -> list:
@@ -56,16 +56,46 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
         if ent["type"] in SUPPRESSED_TYPES:
             continue
 
-        # Rule 2: ORGANIZATION_NAME only meaningful in supplier_onboarding.
-        if ent["type"] == "ORGANIZATION_NAME" and document_type != "supplier_onboarding":
+        val = ent["value"]
+
+        # Drop multiline spans — Presidio sometimes spans across newlines producing
+        # compound values like "Elena Fischer\nDepartment". Never a real entity value.
+        if "\n" in val:
             continue
 
-        # Rule 3: PERSON_NAME must not be a known department name.
-        if ent["type"] == "PERSON_NAME" and ent["value"].strip() in DEPARTMENT_BLOCKLIST:
-            continue
+        # PERSON_NAME rules.
+        if ent["type"] == "PERSON_NAME":
+            # Must contain at least one space — real names are first + last.
+            # Single-word hits are almost always German nouns (Montag, Tür, Tel).
+            if " " not in val:
+                continue
+            # No name is longer than 5 words (catches phrase extractions like
+            # "Zahlungen von meinem Konto" or "Rue de la Paix").
+            if len(val.split()) > 5:
+                continue
+            # Must not be a known department name.
+            if val.strip() in DEPARTMENT_BLOCKLIST:
+                continue
+            # Must start with an uppercase letter.
+            if not val[0].isupper():
+                continue
 
-        # Rule 4: PERSON_NAME must start with an uppercase letter.
-        if ent["type"] == "PERSON_NAME" and ent["value"] and not ent["value"][0].isupper():
+        # ORGANIZATION_NAME rules.
+        if ent["type"] == "ORGANIZATION_NAME":
+            # Short all-caps abbreviations (EU, VAT, IBAN, HRB) are not orgs.
+            if len(val) <= 4 and val.upper() == val:
+                continue
+            # Paragraph-length extractions are not org names.
+            if len(val) > 80:
+                continue
+            # Only meaningful in supplier_onboarding.
+            if document_type != "supplier_onboarding":
+                continue
+
+        # FINANCIAL_AMOUNT only personal data in financial document types.
+        if ent["type"] == "FINANCIAL_AMOUNT" and document_type not in (
+            "expense_report", "supplier_onboarding"
+        ):
             continue
 
         kept.append(ent)

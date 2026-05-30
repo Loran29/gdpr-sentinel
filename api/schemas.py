@@ -149,6 +149,7 @@ class DashboardStatsOut(_Base):
     findings_by_sensitivity: dict[str, int]
     recent_scans: list[RecentScanOut]
     last_scan_timing_breakdown: StageTiming = StageTiming()
+    files_past_retention: int = 0
 
 
 class OwnerSummaryOut(_Base):
