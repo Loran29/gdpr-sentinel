@@ -76,7 +76,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     let is_cancelled = false;
 
     const load_users = async () => {
+      // Timeout fallback — show login even if backend is unreachable
+      const timeout = setTimeout(() => {
+        if (!is_cancelled) {
+          set_users(mock_users);
+          set_is_app_state_ready(true);
+        }
+      }, 5000);
+
       const resolved_users = await get_users();
+      clearTimeout(timeout);
       if (is_cancelled) {
         return;
       }
