@@ -55,6 +55,11 @@ _PERSON_NAME_FILLER = {
 
 # Cert/standard patterns that Presidio tags as ORGANIZATION_NAME.
 import re as _re
+_EMPLOYER_BLOCKLIST = {
+    "Bosch GmbH", "Robert Bosch GmbH", "Bosch", "SAP SE", "SAP",
+    "Siemens AG", "Siemens", "BMW AG", "BMW", "Volkswagen AG", "VW",
+}
+
 _CERT_PATTERN = _re.compile(r"^(ISO|DIN|IEC|EN)\s*\d+", _re.IGNORECASE)
 
 # Entity types that are noise under GDPR when surfaced alone — detected and
@@ -75,10 +80,25 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
 
         val = ent["value"]
 
-        # Drop multiline spans — Presidio sometimes spans across newlines producing
-        # compound values like "Elena Fischer\nDepartment". Never a real entity value.
+        # Drop or repair multiline spans — Presidio sometimes spans across newlines
+        # producing compound values like "Elena Fischer\nDepartment".
+        # If the first line looks like a valid name, keep it trimmed; otherwise drop.
         if "\n" in val:
-            continue
+            first_line = val.split("\n")[0].strip()
+            words = first_line.split()
+            if (
+                ent["type"] == "PERSON_NAME"
+                and len(words) >= 2
+                and len(words) <= 4
+                and first_line[0].isupper()
+                and first_line not in DEPARTMENT_BLOCKLIST
+                and not any(w.lower() in _PERSON_NAME_FILLER for w in words)
+            ):
+                # Repair: use only the first line as the entity value.
+                ent = dict(ent, value=first_line)
+                val = first_line
+            else:
+                continue
 
         # PERSON_NAME rules.
         if ent["type"] == "PERSON_NAME":
@@ -115,6 +135,10 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             # Drop department/role descriptions masquerading as org names.
             val_lower = val.lower()
             if any(w in val_lower for w in ("department", "abteilung", "purchasing", "mgr", "account mgr")):
+                continue
+            # Drop known employer/buyer names — in supplier docs these are the
+            # Bosch entity, not the supplier being onboarded.
+            if val in _EMPLOYER_BLOCKLIST:
                 continue
 
         # FINANCIAL_AMOUNT: only personal data in financial doc types AND only
@@ -153,6 +177,17 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
                 parts = val.strip().split()
                 if len(parts) > 1 and all(len(p) in (2, 4) for p in parts):
                     continue
+
+        # GERMAN_VAT_ID: LLM sometimes tags foreign VAT numbers (FR..., GB...)
+        # as GERMAN_VAT_ID. Enforce the DE+9-digit format.
+        if ent["type"] == "GERMAN_VAT_ID":
+            if not _re.match(r"^DE\d{9}$", val.replace(" ", "")):
+                continue
+
+        # DEPARTMENT: drop pipe-separated compound values — these are formatting
+        # artefacts where two department names got merged ("Personalwesen | HR Dept").
+        if ent["type"] == "DEPARTMENT" and "|" in val:
+            continue
 
         # DEPARTMENT is only meaningful when a person is identified in the same doc.
         if ent["type"] == "DEPARTMENT" and not has_person:
