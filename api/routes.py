@@ -31,6 +31,7 @@ from api.schemas import (
     ScanProgress,
     ScanRunRequest,
     ScanRunResponse,
+    StageTiming,
     UserOut,
 )
 from connectors.local_folder import LocalFolderConnector
@@ -405,6 +406,21 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     # Precision/recall/F1: read from latest eval results if present, else 0.
     precision_pct, recall_pct, f1 = _read_latest_eval_metrics()
 
+    # Per-stage timing breakdown from the last completed scan.
+    timing_breakdown = StageTiming()
+    if last_scan and last_scan.stage_timings_ms:
+        try:
+            import json as _json
+            raw = _json.loads(last_scan.stage_timings_ms)
+            timing_breakdown = StageTiming(
+                extract_ms=float(raw.get("extract_ms", 0)),
+                presidio_ms=float(raw.get("presidio_ms", 0)),
+                llm_ms=float(raw.get("llm_ms", 0)),
+                db_ms=float(raw.get("db_ms", 0)),
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     return DashboardStatsOut(
         total_files_scanned=int(total_files or 0),
         total_size_bytes=int(total_size or 0),
@@ -420,6 +436,7 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         findings_by_document_type=by_doc,
         findings_by_sensitivity=by_sens,
         recent_scans=recent,
+        last_scan_timing_breakdown=timing_breakdown,
     )
 
 

@@ -43,24 +43,18 @@ DEPARTMENT_BLOCKLIST = {
     "Administration", "Management", "Support", "Services",
 }
 
+# Entity types that are noise under GDPR when surfaced alone — detected and
+# logged internally but excluded from Findings and eval scoring.
+SUPPRESSED_TYPES = {"DATE", "JOB_TITLE"}
+
 
 def _filter_entities(entities: list, text: str, document_type: str) -> list:
     """Drop noisy entities using context and co-occurrence rules."""
     kept = []
     for ent in entities:
-        # Rule 1: DATE must appear within 50 chars of a PERSON_NAME or EMPLOYEE_ID.
-        if ent["type"] == "DATE":
-            idx = text.find(ent["value"])
-            if idx == -1:
-                continue
-            window = text[max(0, idx - 50): idx + len(ent["value"]) + 50]
-            has_person_context = any(
-                e["value"] in window
-                for e in entities
-                if e["type"] in ("PERSON_NAME", "EMPLOYEE_ID")
-            )
-            if not has_person_context:
-                continue
+        # Suppress types that are not GDPR-relevant when surfaced alone.
+        if ent["type"] in SUPPRESSED_TYPES:
+            continue
 
         # Rule 2: ORGANIZATION_NAME only meaningful in supplier_onboarding.
         if ent["type"] == "ORGANIZATION_NAME" and document_type != "supplier_onboarding":
@@ -231,7 +225,7 @@ def _run_scan(
                 if scan_row is not None:
                     scan_row.progress_current_file = fm.name
 
-        finding = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
+        result = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
 
         with progress_lock:
             with session_scope() as s:
@@ -239,25 +233,33 @@ def _run_scan(
                 if scan_row is not None:
                     scan_row.progress_files_completed += 1
 
-        return finding
+        return result
+
+    agg_timings = {"extract_ms": 0.0, "presidio_ms": 0.0, "llm_ms": 0.0, "db_ms": 0.0}
 
     with ThreadPoolExecutor(max_workers=5) as pool:
         futures = {pool.submit(_process, item): item for item in work_items}
         for future in as_completed(futures):
             try:
-                finding = future.result()
+                result = future.result()
             except Exception as exc:  # noqa: BLE001
                 logger.warning("File scan task raised: %s", exc)
-                finding = None
+                result = None
             files_processed += 1
-            if finding is not None:
-                files_with_findings += 1
-                findings_for_hash.append(finding)
+            if result is not None:
+                t = result.get("_timings", {})
+                for k in agg_timings:
+                    agg_timings[k] += t.get(k, 0.0)
+                # A result with only _timings means no finding (entities all filtered).
+                if "file_path" in result:
+                    files_with_findings += 1
+                    findings_for_hash.append({k: v for k, v in result.items() if k != "_timings"})
 
     duration = time.perf_counter() - t0
     completed = datetime.now(timezone.utc)
     result_hash = canonical_findings_hash(findings_for_hash)
 
+    import json as _json
     with session_scope() as s:
         scan = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one()
         scan.status = ScanStatus.COMPLETED.value
@@ -268,6 +270,7 @@ def _run_scan(
         scan.files_with_findings = files_with_findings
         scan.total_findings = len(findings_for_hash)
         scan.result_hash = result_hash
+        scan.stage_timings_ms = _json.dumps({k: round(v) for k, v in agg_timings.items()})
 
     return scan_id
 
@@ -280,12 +283,18 @@ def _scan_one_file(
     scan_id: str,
     mod_routing: list[tuple[str, str]],
 ) -> Optional[dict]:
+    t_extract = time.perf_counter()
     pages = extract_text(data)
     full_text = "\n".join(p.text for p in pages if p.text)
+    extract_ms = (time.perf_counter() - t_extract) * 1000
 
+    t_presidio = time.perf_counter()
     presidio_entities = presidio_analyze(full_text)
+    presidio_ms = (time.perf_counter() - t_presidio) * 1000
 
+    t_llm = time.perf_counter()
     llm_result = classify(full_text, presidio_entities, filename_hint=fm.name)
+    llm_ms = (time.perf_counter() - t_llm) * 1000
 
     # Merge LLM-discovered entities with Presidio results, dedup by (type, value).
     merged: list[dict] = [
@@ -319,8 +328,10 @@ def _scan_one_file(
 
     # No entities → no flagged finding.
     if not merged:
+        t_db = time.perf_counter()
         _upsert_file_only(fm, sha, owner_user_id=connector.get_owner(fm.path))
-        return None
+        db_ms = (time.perf_counter() - t_db) * 1000
+        return {"_timings": {"extract_ms": extract_ms, "presidio_ms": presidio_ms, "llm_ms": llm_ms, "db_ms": db_ms}}
 
     # Owner attribution.
     direct_owner = connector.get_owner(fm.path)
@@ -336,6 +347,7 @@ def _scan_one_file(
     finding_id = f"f_{uuid.uuid4().hex[:8]}"
     scan_timestamp = datetime.now(timezone.utc)
 
+    t_db = time.perf_counter()
     with session_scope() as s:
         # Ensure File row exists.
         file_row = s.execute(select(File).where(File.path == fm.path)).scalar_one_or_none()
@@ -390,6 +402,7 @@ def _scan_one_file(
                     confidence=float(e["confidence"]),
                 )
             )
+    db_ms = (time.perf_counter() - t_db) * 1000
 
     # Hash payload — must be stable across runs.
     # Only include entities from deterministic detectors (presidio/regex).
@@ -397,6 +410,7 @@ def _scan_one_file(
     # even at temperature=0 due to OpenRouter proxy non-determinism.
     deterministic_entities = [e for e in merged if e["detector"] != "llm"]
     return {
+        "_timings": {"extract_ms": extract_ms, "presidio_ms": presidio_ms, "llm_ms": llm_ms, "db_ms": db_ms},
         "file_path": fm.path,
         "file_sha256": sha,
         "document_type": llm_result["document_type"],

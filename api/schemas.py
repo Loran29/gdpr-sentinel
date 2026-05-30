@@ -126,6 +126,13 @@ class RecentScanOut(_Base):
     findings_count: int
 
 
+class StageTiming(BaseModel):
+    extract_ms: float = 0.0
+    presidio_ms: float = 0.0
+    llm_ms: float = 0.0
+    db_ms: float = 0.0
+
+
 class DashboardStatsOut(_Base):
     total_files_scanned: int
     total_size_bytes: int
@@ -141,6 +148,7 @@ class DashboardStatsOut(_Base):
     findings_by_document_type: dict[str, int]
     findings_by_sensitivity: dict[str, int]
     recent_scans: list[RecentScanOut]
+    last_scan_timing_breakdown: StageTiming = StageTiming()
 
 
 class OwnerSummaryOut(_Base):

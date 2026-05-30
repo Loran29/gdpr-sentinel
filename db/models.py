@@ -90,6 +90,7 @@ class Scan(Base):
     progress_files_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     progress_files_completed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     progress_current_file: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    stage_timings_ms: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
 class Finding(Base):
