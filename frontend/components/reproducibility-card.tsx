@@ -9,15 +9,15 @@ export function ReproducibilityCard({ data }: { data: ReproducibilitySnapshot })
         <CardTitle>Reproducibility</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2.5">
-        <div className="flex items-center justify-between rounded-lg border border-border_grey/70 bg-page_bg px-2.5 py-2 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-border_grey/50 py-2 last:border-0">
           <p className="text-xs uppercase tracking-wide text-text_medium">Last full scan result hash</p>
           <p className="font-mono text-[13px] text-text_dark">{data.last_full_scan_hash}</p>
         </div>
-        <div className="flex items-center justify-between rounded-lg border border-border_grey/70 bg-page_bg px-2.5 py-2 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-border_grey/50 py-2 last:border-0">
           <p className="text-xs uppercase tracking-wide text-text_medium">Previous full scan result hash</p>
           <p className="font-mono text-[13px] text-text_dark">{data.previous_full_scan_hash}</p>
         </div>
-        <div className="flex items-center justify-between rounded-lg border border-border_grey/70 bg-page_bg px-2.5 py-2 dark:bg-slate-800/50">
+        <div className="flex items-center justify-between border-b border-border_grey/50 py-2 last:border-0">
           <p className="text-xs uppercase tracking-wide text-text_medium">Matching status</p>
           <StatusBadge value={data.matching_status === "Match" ? "completed" : "failed"} />
         </div>

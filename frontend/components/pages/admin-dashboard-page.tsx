@@ -151,7 +151,7 @@ export function AdminDashboardPage() {
           <CardHeader>
             <CardTitle>Findings by document type</CardTitle>
           </CardHeader>
-          <CardContent className="rounded-lg border border-border_grey/70 bg-page_bg p-2 dark:bg-slate-900/60">
+          <CardContent>
             <DocumentTypeBarChart data={document_type_data} />
           </CardContent>
         </Card>
@@ -160,7 +160,7 @@ export function AdminDashboardPage() {
           <CardHeader>
             <CardTitle>Sensitivity distribution</CardTitle>
           </CardHeader>
-          <CardContent className="rounded-lg border border-border_grey/70 bg-page_bg p-2 dark:bg-slate-900/60">
+          <CardContent>
             <SensitivityChart data={sensitivity_data} />
           </CardContent>
         </Card>
@@ -189,7 +189,7 @@ function Metric({
   value_class_name?: string;
 }) {
   return (
-    <div className="rounded-lg border border-border_grey/70 bg-page_bg px-2.5 py-2 dark:bg-slate-800/50">
+    <div className="rounded-lg border border-border_grey/60 px-2.5 py-2">
       <p className="text-[11px] uppercase tracking-wide text-text_medium">{label}</p>
       <p
         className={`${monospace ? "font-mono text-[13px]" : "text-base"} ${value_class_name ?? "text-text_dark"} mt-1 font-semibold leading-none`}
