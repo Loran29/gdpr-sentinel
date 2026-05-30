@@ -18,7 +18,7 @@ export function OwnerTable({ owners }: { owners: OwnerSummary[] }) {
       </TableHeader>
       <TableBody>
         {owners.map((owner) => (
-          <TableRow key={owner.user_id} className="hover:bg-slate-50/80 dark:bg-slate-800/50">
+          <TableRow key={owner.user_id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60">
             <TableCell className="font-medium text-text_dark">{owner.name}</TableCell>
             <TableCell>
               <StatusBadge value={owner.type} />

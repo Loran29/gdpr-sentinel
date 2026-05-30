@@ -6,7 +6,7 @@ export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElem
 }
 
 export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cn("border-b border-border_grey bg-slate-50 dark:bg-slate-800/80", className)} {...props} />;
+  return <thead className={cn("border-b border-border_grey bg-slate-50/70 dark:bg-slate-800/80", className)} {...props} />;
 }
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
