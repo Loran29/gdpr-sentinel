@@ -45,6 +45,18 @@ DEPARTMENT_BLOCKLIST = {
     "Administration", "Management", "Support", "Services",
 }
 
+# German/English filler words that appear in PERSON_NAME false positives.
+_PERSON_NAME_FILLER = {
+    "von", "van", "de", "der", "die", "das", "und", "meinem", "konto",
+    "zahlungen", "rue", "str", "straße", "strasse", "address", "addr",
+    "ärztliche", "arztliche", "krankmeldung", "bescheinigung",
+    "abteilungsleitung", "personalwesen", "department", "mgr",
+}
+
+# Cert/standard patterns that Presidio tags as ORGANIZATION_NAME.
+import re as _re
+_CERT_PATTERN = _re.compile(r"^(ISO|DIN|IEC|EN)\s*\d+", _re.IGNORECASE)
+
 # Entity types that are noise under GDPR when surfaced alone — detected and
 # logged internally but excluded from Findings and eval scoring.
 SUPPRESSED_TYPES = {"DATE", "JOB_TITLE", "LOCATION", "POSTAL_CODE", "OTHER"}
@@ -78,6 +90,16 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
                 continue
             if not val[0].isupper():
                 continue
+            # Drop if any word (lowercased) is a known filler/non-name word.
+            words_lower = {w.lower().rstrip(".,") for w in val.split()}
+            if words_lower & _PERSON_NAME_FILLER:
+                continue
+            # Drop "Name E-12345" merged spans (name + employee ID in one hit).
+            if _re.search(r"E-\d{5}", val):
+                continue
+            # Drop single-letter initials like "J. Keller" or "M. Braun".
+            if _re.match(r"^[A-ZÄÖÜ]\.\s+\w+$", val):
+                continue
 
         # ORGANIZATION_NAME rules.
         if ent["type"] == "ORGANIZATION_NAME":
@@ -86,6 +108,13 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             if len(val) > 80:
                 continue
             if document_type != "supplier_onboarding":
+                continue
+            # Drop ISO/DIN/IEC certification standards.
+            if _CERT_PATTERN.match(val):
+                continue
+            # Drop department/role descriptions masquerading as org names.
+            val_lower = val.lower()
+            if any(w in val_lower for w in ("department", "abteilung", "purchasing", "mgr", "account mgr")):
                 continue
 
         # FINANCIAL_AMOUNT: only personal data in financial doc types AND only
@@ -117,10 +146,13 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             digits = sum(c.isdigit() for c in val)
             if digits < 7:
                 continue
-            # IBAN fragment: only digits and spaces, groups of 4 (e.g. "0044 0532 0130 00")
+            # IBAN fragment: digit-only string with uniform 2/4-char grouping
+            # e.g. "0044 0532 0130 00" — not a real phone number.
             stripped = val.replace(" ", "")
-            if stripped.isdigit() and not val.startswith(("+", "0")):
-                continue
+            if stripped.isdigit():
+                parts = val.strip().split()
+                if len(parts) > 1 and all(len(p) in (2, 4) for p in parts):
+                    continue
 
         # DEPARTMENT is only meaningful when a person is identified in the same doc.
         if ent["type"] == "DEPARTMENT" and not has_person:
