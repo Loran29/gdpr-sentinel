@@ -46,6 +46,6 @@ export function StatusBadge({ value, size = "default" }: { value: StatusKind; si
     class_name = "border-slate-300 bg-slate-100 text-slate-700";
   }
 
-  const size_class_name = size === "large" ? "h-6 px-2.5 text-xs" : "";
+  const size_class_name = size === "large" ? "h-6 px-2.5 text-xs whitespace-nowrap" : "whitespace-nowrap";
   return <Badge className={`font-semibold ${size_class_name} ${class_name}`}>{format_review_status(value)}</Badge>;
 }
