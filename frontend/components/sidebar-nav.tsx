@@ -58,11 +58,6 @@ export function SidebarNav() {
             >
               <Icon className={cn("h-4 w-4", active ? "text-bosch_red" : "text-slate-400")} />
               <span>{item.label}</span>
-              {is_admin && nav_metadata?.is_admin_view ? (
-                <span className="ml-auto rounded-md border border-slate-500 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
-                  Admin
-                </span>
-              ) : null}
             </Link>
           );
         })}
