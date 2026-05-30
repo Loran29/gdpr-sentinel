@@ -50,33 +50,53 @@ export function FindingDetailPanel({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
-          <p className="text-xs uppercase tracking-wide text-text_medium">file_name</p>
-          <p className="font-medium text-text_dark">{finding.file_name}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">file_path</p>
-          <p className="break-all font-mono text-[13px] text-text_dark">{finding.file_path}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">file_sha256</p>
-          <p className="break-all font-mono text-xs text-text_dark">{finding.file_sha256}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">document_type</p>
-          <p className="text-text_dark">{format_document_type(finding.document_type)}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">sensitivity_level</p>
-          <p>
-            <StatusBadge value={finding.sensitivity_level} />
-          </p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">owner_name</p>
-          <p>{finding.owner_name}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">owner_type</p>
-          <p>
-            <StatusBadge value={finding.owner_type} />
-          </p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">master_of_data_id</p>
-          <p className="break-all font-mono text-[13px]">{finding.master_of_data_id ?? "null"}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">scan_timestamp</p>
-          <p className="font-mono text-[13px]">{format_timestamp(finding.scan_timestamp)}</p>
-          <p className="text-xs uppercase tracking-wide text-text_medium">review_status</p>
-          <p>
-            <StatusBadge value={finding.review_status} />
-          </p>
+        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
+          <table className="w-full text-sm">
+            <tbody>
+              {[
+                { label: "File name",       value: finding.file_name,                   mono: false },
+                { label: "File path",       value: finding.file_path,                   mono: true  },
+                { label: "SHA-256",         value: `${finding.file_sha256.slice(0, 16)}...`, mono: true },
+                { label: "Document type",   value: format_document_type(finding.document_type), mono: false },
+                { label: "Owner",           value: finding.owner_name ?? "—",           mono: false },
+                { label: "Master of Data",  value: finding.master_of_data_id ?? "—",    mono: true  },
+                { label: "Scanned",         value: format_timestamp(finding.scan_timestamp), mono: true },
+              ].map(({ label, value, mono }) => (
+                <tr key={label} className="border-b border-border_grey/40 last:border-0">
+                  <td className="w-36 shrink-0 py-1.5 pr-3 align-top text-[11px] font-semibold uppercase tracking-wide text-text_medium">
+                    {label}
+                  </td>
+                  <td className={`min-w-0 break-all py-1.5 align-top ${mono ? "font-mono text-[12px]" : ""} text-text_dark`}>
+                    {value}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-b border-border_grey/40">
+                <td className="w-36 py-1.5 pr-3 align-middle text-[11px] font-semibold uppercase tracking-wide text-text_medium">
+                  Sensitivity
+                </td>
+                <td className="py-1.5 align-middle">
+                  <StatusBadge value={finding.sensitivity_level} />
+                </td>
+              </tr>
+              <tr className="border-b border-border_grey/40">
+                <td className="w-36 py-1.5 pr-3 align-middle text-[11px] font-semibold uppercase tracking-wide text-text_medium">
+                  Owner type
+                </td>
+                <td className="py-1.5 align-middle">
+                  <StatusBadge value={finding.owner_type} />
+                </td>
+              </tr>
+              <tr>
+                <td className="w-36 py-1.5 pr-3 align-middle text-[11px] font-semibold uppercase tracking-wide text-text_medium">
+                  Review status
+                </td>
+                <td className="py-1.5 align-middle">
+                  <StatusBadge value={finding.review_status} />
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <Separator />
