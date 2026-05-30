@@ -26,7 +26,7 @@ export function ThemeSwitcher() {
     window.localStorage.setItem(THEME_KEY, next);
   };
 
-  if (!mounted) return <div className="h-8 w-16 rounded-full" />;
+  if (!mounted) return <div className="h-8 w-8" />;
 
   const is_dark = theme_mode === "dark";
 
@@ -35,32 +35,14 @@ export function ThemeSwitcher() {
       type="button"
       aria-label={is_dark ? "Switch to light mode" : "Switch to dark mode"}
       onClick={toggle_theme}
-      className={`
-        relative inline-flex h-8 w-16 shrink-0 cursor-pointer items-center rounded-full border-2 transition-colors duration-200 focus:outline-none
-        ${is_dark
-          ? "border-slate-600 bg-slate-700"
-          : "border-slate-200 bg-slate-100"
-        }
-      `}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border_grey bg-card_bg text-text_medium transition-colors hover:border-text_medium hover:text-text_dark focus:outline-none"
     >
-      {/* Track icons */}
-      <Sun
-        className={`absolute left-1.5 h-3.5 w-3.5 transition-opacity duration-200 ${is_dark ? "opacity-30 text-slate-400" : "opacity-100 text-amber-500"}`}
-      />
-      <Moon
-        className={`absolute right-1.5 h-3.5 w-3.5 transition-opacity duration-200 ${is_dark ? "opacity-100 text-blue-300" : "opacity-30 text-slate-400"}`}
-      />
-      {/* Thumb */}
-      <span
-        className={`
-          inline-block h-5 w-5 rounded-full shadow-sm transition-transform duration-200
-          ${is_dark
-            ? "translate-x-8 bg-slate-200"
-            : "translate-x-0.5 bg-white"
-          }
-        `}
-      />
+      {is_dark
+        ? <Sun className="h-4 w-4" />
+        : <Moon className="h-4 w-4" />
+      }
     </button>
   );
 }
+
 
