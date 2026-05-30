@@ -6,8 +6,10 @@ entry points so behaviour is consistent.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -27,6 +29,53 @@ from scanner.llm_classifier import classify
 from scanner.presidio_scanner import analyze as presidio_analyze
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Contextual entity filtering — reduces false positives before DB write and hash
+# ---------------------------------------------------------------------------
+
+DEPARTMENT_BLOCKLIST = {
+    "Project Management", "Engineering", "Finance", "Digital Operations",
+    "People & Culture", "IT Governance", "HR", "IT", "Procurement",
+    "Operations", "Legal", "Compliance", "Marketing", "Sales",
+    "Research", "Development", "Quality", "Security", "Accounting",
+    "Administration", "Management", "Support", "Services",
+}
+
+
+def _filter_entities(entities: list, text: str, document_type: str) -> list:
+    """Drop noisy entities using context and co-occurrence rules."""
+    kept = []
+    for ent in entities:
+        # Rule 1: DATE must appear within 50 chars of a PERSON_NAME or EMPLOYEE_ID.
+        if ent["type"] == "DATE":
+            idx = text.find(ent["value"])
+            if idx == -1:
+                continue
+            window = text[max(0, idx - 50): idx + len(ent["value"]) + 50]
+            has_person_context = any(
+                e["value"] in window
+                for e in entities
+                if e["type"] in ("PERSON_NAME", "EMPLOYEE_ID")
+            )
+            if not has_person_context:
+                continue
+
+        # Rule 2: ORGANIZATION_NAME only meaningful in supplier_onboarding.
+        if ent["type"] == "ORGANIZATION_NAME" and document_type != "supplier_onboarding":
+            continue
+
+        # Rule 3: PERSON_NAME must not be a known department name.
+        if ent["type"] == "PERSON_NAME" and ent["value"].strip() in DEPARTMENT_BLOCKLIST:
+            continue
+
+        # Rule 4: PERSON_NAME must start with an uppercase letter.
+        if ent["type"] == "PERSON_NAME" and ent["value"] and not ent["value"][0].isupper():
+            continue
+
+        kept.append(ent)
+    return kept
 
 
 # ---------------------------------------------------------------------------
@@ -138,13 +187,9 @@ def _run_scan(
         if scan_row is not None:
             scan_row.progress_files_total = files_total
 
-    for idx, fm in enumerate(files):
-        # Update current file before processing so a slow file shows progress.
-        with session_scope() as s:
-            scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
-            if scan_row is not None:
-                scan_row.progress_current_file = fm.name
-
+    # Pre-read and hash files; resolve delta skips before launching threads.
+    work_items: list[tuple[FileMeta, bytes, str]] = []
+    for fm in files:
         try:
             data = connector.read_file(fm.path)
         except Exception as exc:  # noqa: BLE001
@@ -153,7 +198,6 @@ def _run_scan(
 
         sha = file_sha256(data)
 
-        # Delta: skip files we've already processed AND whose contents are unchanged.
         if scan_type == ScanType.DELTA.value:
             with session_scope() as s:
                 existing = s.execute(select(File).where(File.path == fm.path)).scalar_one_or_none()
@@ -169,20 +213,46 @@ def _run_scan(
                             scan_row.progress_files_completed += 1
                     continue
 
-        finding = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
-        files_processed += 1
-        if finding is not None:
-            files_with_findings += 1
-            findings_for_hash.append(finding)
+        work_items.append((fm, data, sha))
 
-        # Increment completed counter after each file finishes.
-        with session_scope() as s:
-            scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
-            if scan_row is not None:
-                scan_row.progress_files_completed += 1
-                # Clear current_file on the last file.
-                if idx == files_total - 1:
-                    scan_row.progress_current_file = None
+    # Update the progress total to reflect only the files we'll actually scan.
+    with session_scope() as s:
+        scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
+        if scan_row is not None:
+            scan_row.progress_files_total = files_skipped + len(work_items)
+
+    progress_lock = threading.Lock()
+
+    def _process(item: tuple[FileMeta, bytes, str]) -> Optional[dict]:
+        fm, data, sha = item
+        with progress_lock:
+            with session_scope() as s:
+                scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
+                if scan_row is not None:
+                    scan_row.progress_current_file = fm.name
+
+        finding = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
+
+        with progress_lock:
+            with session_scope() as s:
+                scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
+                if scan_row is not None:
+                    scan_row.progress_files_completed += 1
+
+        return finding
+
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(_process, item): item for item in work_items}
+        for future in as_completed(futures):
+            try:
+                finding = future.result()
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("File scan task raised: %s", exc)
+                finding = None
+            files_processed += 1
+            if finding is not None:
+                files_with_findings += 1
+                findings_for_hash.append(finding)
 
     duration = time.perf_counter() - t0
     completed = datetime.now(timezone.utc)
@@ -243,6 +313,9 @@ def _scan_one_file(
                 "confidence": 0.85,
             }
         )
+
+    # Apply contextual filters to reduce false positives.
+    merged = _filter_entities(merged, full_text, llm_result["document_type"])
 
     # No entities → no flagged finding.
     if not merged:

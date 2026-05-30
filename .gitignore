@@ -19,6 +19,9 @@ venv/
 # Eval results (generated output, not source)
 eval/results/
 
+# LLM response cache (deterministic, keyed on content hash — regenerated on demand)
+.llm_cache/
+
 # Data directory (PDFs are downloaded/generated at runtime)
 data/
 

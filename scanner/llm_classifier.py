@@ -7,16 +7,44 @@ backend boots without an API key for hackathon dev.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from core.config import get_settings
 from core.enums import DocumentType, EntityType, SensitivityLevel
 from scanner.presidio_scanner import PresidioEntity
 
 logger = logging.getLogger(__name__)
+
+CACHE_DIR = Path(".llm_cache")
+
+
+def _cache_key(text: str, model: str) -> str:
+    return hashlib.sha256(f"{model}::{text}".encode("utf-8")).hexdigest()
+
+
+def _cache_get(key: str) -> dict | None:
+    path = CACHE_DIR / f"{key}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001
+            pass
+    return None
+
+
+def _cache_put(key: str, value: dict) -> None:
+    try:
+        CACHE_DIR.mkdir(exist_ok=True)
+        (CACHE_DIR / f"{key}.json").write_text(
+            json.dumps(value, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
 
 # DO NOT PARAPHRASE — used verbatim per CONTRACT.md.
@@ -115,6 +143,14 @@ def classify(text: str, presidio_entities: list[PresidioEntity], filename_hint: 
         logger.info("LLM live mode active (model=%s)", settings.openrouter_model)
         _live_mode_logged = True
 
+    # Check disk cache — keyed on model + document text so identical input always
+    # returns identical output, which is also our reproducibility guarantee.
+    cache_key = _cache_key(text[:8000], settings.openrouter_model)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        logger.debug("LLM cache hit for key %s", cache_key[:12])
+        return cached
+
     user_message = _build_user_message(text, presidio_entities)
 
     def _call(retry: bool = False) -> str:
@@ -136,17 +172,20 @@ def classify(text: str, presidio_entities: list[PresidioEntity], filename_hint: 
 
     try:
         raw = _call()
-        return _parse_or_raise(raw)
+        result = _parse_or_raise(raw)
     except _BadJSON:
         try:
             raw = _call(retry=True)
-            return _parse_or_raise(raw)
+            result = _parse_or_raise(raw)
         except _BadJSON:
             logger.error("LLM returned non-JSON twice; using failure result")
             return dict(_FAILURE_RESULT)
     except Exception as exc:  # noqa: BLE001
         logger.error("LLM call failed: %s", exc)
         return dict(_FAILURE_RESULT)
+
+    _cache_put(cache_key, result)
+    return result
 
 
 # ---------------------------------------------------------------------------
