@@ -15,10 +15,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+import sqlalchemy
 import yaml
 from sqlalchemy import select
 
 from connectors.base import Connector, FileMeta
+from connectors.local_folder import LocalFolderConnector
 from core.config import get_settings
 from core.enums import OwnerType, ScanStatus, ScanType
 from core.hashing import canonical_findings_hash, file_sha256
@@ -50,6 +52,9 @@ SUPPRESSED_TYPES = {"DATE", "JOB_TITLE", "LOCATION", "POSTAL_CODE", "OTHER"}
 
 def _filter_entities(entities: list, text: str, document_type: str) -> list:
     """Drop noisy entities using context and co-occurrence rules."""
+    # Pre-compute whether any PERSON_NAME survived to this point.
+    has_person = any(e["type"] == "PERSON_NAME" for e in entities)
+
     kept = []
     for ent in entities:
         # Suppress types that are not GDPR-relevant when surfaced alone.
@@ -94,8 +99,12 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
 
         # FINANCIAL_AMOUNT only personal data in financial document types.
         if ent["type"] == "FINANCIAL_AMOUNT" and document_type not in (
-            "expense_report", "supplier_onboarding"
+            "expense_report", "supplier_onboarding", "financial_authorization"
         ):
+            continue
+
+        # DEPARTMENT is only meaningful when a person is identified in the same doc.
+        if ent["type"] == "DEPARTMENT" and not has_person:
             continue
 
         kept.append(ent)
@@ -131,6 +140,64 @@ def run_delta_scan(
         scan_type=ScanType.DELTA.value,
         scan_id=scan_id,
     )
+
+
+def rescan_file(file_id: str) -> Optional[str]:
+    """Re-run the pipeline for a single file by its DB file_id.
+
+    Returns the finding_id of the new finding, or None if no entities were found.
+    Replaces the previous finding for this file (dedup logic in _scan_one_file).
+    """
+    from db.models import File as FileModel
+
+    with session_scope() as s:
+        file_row = s.execute(select(FileModel).where(FileModel.id == file_id)).scalar_one_or_none()
+        if file_row is None:
+            return None
+        file_path = file_row.path
+
+    connector = LocalFolderConnector(root=get_settings().data_root_path)
+    try:
+        data = connector.read_file(file_path)
+    except Exception as exc:
+        logger.warning("rescan_file: read failed for %s: %s", file_path, exc)
+        return None
+
+    sha = file_sha256(data)
+    mod_routing = _load_mod_routing()
+
+    # Use a synthetic scan_id for single-file rescans.
+    scan_id = f"rescan_{uuid.uuid4().hex[:8]}"
+    with session_scope() as s:
+        s.add(
+            Scan(
+                id=scan_id,
+                source_id="src_local_data",
+                scan_type=ScanType.FULL.value,
+                status=ScanStatus.COMPLETED.value,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+                duration_sec=0.0,
+                files_processed=1,
+                result_hash="",
+            )
+        )
+
+    from connectors.base import FileMeta
+    import mimetypes
+    from pathlib import Path as _Path
+    p = _Path(file_path) if not file_path.startswith("/data/") else connector._resolve(file_path)
+    stat = p.stat() if p.exists() else None
+    fm = FileMeta(
+        path=file_path,
+        name=_Path(file_path).name,
+        size_bytes=stat.st_size if stat else 0,
+        last_modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc) if stat else datetime.now(timezone.utc),
+        mime_type=mimetypes.guess_type(_Path(file_path).name)[0] or "application/pdf",
+    )
+
+    result = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
+    return result.get("file_path") if result and "file_path" in result else None
 
 
 def reserve_scan_id(scan_type: str, source_id: Optional[str] = None) -> str:
@@ -405,6 +472,17 @@ def _scan_one_file(
             )
             file_row.last_scanned_at = scan_timestamp.replace(tzinfo=None)
             file_row.has_findings = True
+
+        # Upsert finding: one canonical finding per file — latest scan wins.
+        # Delete all previous findings for this file before inserting the new one
+        # so /findings/by-user never returns duplicates across scan runs.
+        existing_findings = s.execute(
+            select(Finding).where(Finding.file_id == file_row.id)
+        ).scalars().all()
+        for ef in existing_findings:
+            s.execute(sqlalchemy.delete(Entity).where(Entity.finding_id == ef.id))
+            s.delete(ef)
+        s.flush()
 
         finding = Finding(
             id=finding_id,

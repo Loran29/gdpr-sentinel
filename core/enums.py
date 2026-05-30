@@ -13,6 +13,8 @@ class DocumentType(str, Enum):
     INCIDENT_REPORT = "incident_report"
     SUPPLIER_ONBOARDING = "supplier_onboarding"
     TRAINING_EVALUATION = "training_evaluation"
+    MEDICAL_RECORD = "medical_record"
+    FINANCIAL_AUTHORIZATION = "financial_authorization"
     UNKNOWN = "unknown"
 
 

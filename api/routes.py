@@ -47,7 +47,7 @@ from db.models import (
     User,
 )
 from db.session import get_db
-from scanner.pipeline import reserve_scan_id, run_delta_scan, run_full_scan
+from scanner.pipeline import reserve_scan_id, rescan_file, run_delta_scan, run_full_scan
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +335,15 @@ def finding_action(
     db.commit()
     db.refresh(f)
     return _build_finding_out(db, f)
+
+
+@router.post("/files/{file_id}/rescan")
+def file_rescan(file_id: str = Path(...), db: Session = Depends(get_db)) -> dict:
+    file_row = db.execute(select(File).where(File.id == file_id)).scalar_one_or_none()
+    if file_row is None:
+        raise FileNotFoundAppError(f"No file with id '{file_id}' exists", {"file_id": file_id})
+    result = rescan_file(file_id)
+    return {"file_id": file_id, "rescanned": True, "has_findings": result is not None}
 
 
 # ---------------------------------------------------------------------------

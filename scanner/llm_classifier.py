@@ -54,7 +54,7 @@ You receive: (1) the text of one document, (2) a list of entities already detect
 
 Your job: return ONLY a JSON object with this exact shape:
 {
-  "document_type": "expense_report" | "it_access_request" | "incident_report" | "supplier_onboarding" | "training_evaluation" | "unknown",
+  "document_type": "expense_report" | "it_access_request" | "incident_report" | "supplier_onboarding" | "training_evaluation" | "medical_record" | "financial_authorization" | "unknown",
   "sensitivity_level": "high" | "medium" | "low",
   "reasoning": "<2-4 sentences explaining the GDPR relevance, citing the specific personal data found and the most relevant legal basis (Art. 6 GDPR sub-clause, German retention obligation if applicable)>",
   "retention_recommendation": "<one sentence with concrete retention period and trigger event>",
@@ -67,6 +67,7 @@ Rules:
 - Use ONLY these entity types: PERSON_NAME, EMPLOYEE_ID, DEPARTMENT, JOB_TITLE, EMAIL_ADDRESS, PHONE_NUMBER, POSTAL_ADDRESS, POSTAL_CODE, ORGANIZATION_NAME, GERMAN_VAT_ID, IBAN, DATE, FINANCIAL_AMOUNT, LOCATION, SYSTEM_IDENTIFIER, OTHER.
 - Only include entities in `additional_entities` that the deterministic recognizers MISSED. Do not duplicate.
 - `sensitivity_level`: high = contains direct personal identifiers (name + ID, name + financial, name + health); medium = contains personal data but lower stakes (training, B2B contact); low = minimal or only indirect personal data.
+- `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions.
 - `reasoning` MUST reference at least one specific entity value from the document. Generic reasoning is rejected.
 - Output ONLY the JSON. No prose, no markdown fences, no preamble."""
 
@@ -260,6 +261,10 @@ _STUB_BY_FILENAME = [
     ("incident_report", "incident"),
     ("supplier_onboarding", "supplier"),
     ("training_evaluation", "training"),
+    ("medical_record", "krankmeldung"),
+    ("medical_record", "medical"),
+    ("financial_authorization", "bank_authorization"),
+    ("financial_authorization", "sepa"),
 ]
 
 _STUB_REASONING = {
@@ -268,6 +273,8 @@ _STUB_REASONING = {
     "incident_report": "Security incident record describing personal data of named individuals and a specific location; processed under GDPR Art. 6(1)(c) (legal obligation under §33 BDSG / GDPR Art. 33).",
     "supplier_onboarding": "Supplier onboarding record containing a named contact email, postal address, and German VAT ID; mostly B2B but the contact is a named individual under GDPR Art. 4(1).",
     "training_evaluation": "Training feedback record containing the participant's name and free-text comments; processed under GDPR Art. 6(1)(f) (legitimate interest in training records).",
+    "medical_record": "Medical certificate containing patient name and date of birth; classified as special category data under GDPR Art. 9(2)(b) (employment law obligations). Strict access controls apply.",
+    "financial_authorization": "Bank authorization containing name, IBAN, and postal address of the account holder; processed under GDPR Art. 6(1)(b) (contractual necessity). Retain per §147 AO.",
     "unknown": "Document could not be classified automatically; manual review recommended.",
 }
 
@@ -277,6 +284,8 @@ _STUB_RETENTION = {
     "incident_report": "Retain 5 years from incident closure for audit and §33 BDSG compliance, then delete.",
     "supplier_onboarding": "Retain for the duration of the supplier relationship plus 10 years per §147 AO, then delete.",
     "training_evaluation": "Retain 2 years for HR records, then delete.",
+    "medical_record": "Retain for duration of employment plus 3 years per §5 EFZG, then delete.",
+    "financial_authorization": "Retain 10 years from last transaction per §147 AO, then delete.",
     "unknown": "Manual review required.",
 }
 
@@ -286,6 +295,8 @@ _STUB_SENSITIVITY = {
     "incident_report": "high",
     "supplier_onboarding": "medium",
     "training_evaluation": "low",
+    "medical_record": "high",
+    "financial_authorization": "high",
     "unknown": "low",
 }
 

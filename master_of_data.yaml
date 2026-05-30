@@ -21,6 +21,10 @@ masters_of_data:
     user_id: u_008
     sources: ["/data/shared/IT/"]
     description: "Master of Data for IT shared drives"
+  - id: mod_custom_test
+    user_id: u_005
+    sources: ["/data/custom/"]
+    description: "Master of Data for custom test documents (IT Governance)"
   - id: mod_default
     user_id: u_006
     sources: ["**"]
