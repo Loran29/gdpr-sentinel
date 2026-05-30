@@ -67,7 +67,7 @@ Rules:
 - Use ONLY these entity types: PERSON_NAME, EMPLOYEE_ID, DEPARTMENT, JOB_TITLE, EMAIL_ADDRESS, PHONE_NUMBER, POSTAL_ADDRESS, POSTAL_CODE, ORGANIZATION_NAME, GERMAN_VAT_ID, IBAN, DATE, FINANCIAL_AMOUNT, LOCATION, SYSTEM_IDENTIFIER, OTHER.
 - Only include entities in `additional_entities` that the deterministic recognizers MISSED. Do not duplicate.
 - `sensitivity_level`: high = contains direct personal identifiers (name + ID, name + financial, name + health); medium = contains personal data but lower stakes (training, B2B contact); low = minimal or only indirect personal data.
-- `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions; use "internal_memo" for internal communications, memos, announcements, and bilingual corporate notices.
+- `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions; use "internal_memo" for employee-to-employee communications, announcements, and bilingual notices — NOT for project charters, policy documents, or governance frameworks (use "unknown" for those).
 - `reasoning` MUST reference at least one specific entity value from the document. Generic reasoning is rejected.
 - Output ONLY the JSON. No prose, no markdown fences, no preamble."""
 

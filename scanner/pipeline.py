@@ -62,13 +62,57 @@ _EMPLOYER_BLOCKLIST = {
 
 _CERT_PATTERN = _re.compile(r"^(ISO|DIN|IEC|EN)\s*\d+", _re.IGNORECASE)
 
-# Entity types that are noise under GDPR when surfaced alone — detected and
-# logged internally but excluded from Findings and eval scoring.
+# SYSTEM_IDENTIFIER must look like a real identifier: has a digit OR a separator.
+# "DataGuard Initiative" has no digits and no separators — not an ID.
+_SYS_ID_PATTERN = _re.compile(r"[\d\-_/\\]")
+
+# Entity types that are noise under GDPR when surfaced alone.
 SUPPRESSED_TYPES = {"DATE", "JOB_TITLE", "LOCATION", "POSTAL_CODE", "OTHER"}
+
+
+def _dedup_persons(entities: list) -> list:
+    """Merge honorific variants of the same person.
+
+    If both "Ingrid Haller" and "Dr. med. Ingrid Haller" exist, keep only the
+    longer one. Matches on the last word (surname) being identical.
+    Avoids over-merging: only collapses when one value's words are a strict
+    subset of the other's (e.g. initials, honorifics prepended).
+    """
+    persons = [e for e in entities if e["type"] == "PERSON_NAME"]
+    others  = [e for e in entities if e["type"] != "PERSON_NAME"]
+    if len(persons) <= 1:
+        return entities
+
+    # Group by last word (surname).
+    from collections import defaultdict
+    by_surname: dict[str, list] = defaultdict(list)
+    for p in persons:
+        surname = p["value"].split()[-1].lower().rstrip(".,")
+        by_surname[surname].append(p)
+
+    kept_persons = []
+    for surname, group in by_surname.items():
+        if len(group) == 1:
+            kept_persons.append(group[0])
+            continue
+        # Keep the one whose words are a superset — e.g. "Dr. med. Ingrid Haller"
+        # contains all words of "Ingrid Haller".  If no clear superset, keep all.
+        group_words = [set(g["value"].lower().split()) for g in group]
+        best = group[0]
+        for i, g in enumerate(group):
+            if all(group_words[i] >= group_words[j] for j in range(len(group)) if j != i):
+                best = g
+                break
+        kept_persons.append(best)
+
+    return others + kept_persons
 
 
 def _filter_entities(entities: list, text: str, document_type: str) -> list:
     """Drop noisy entities using context and co-occurrence rules."""
+    # Dedup honorific variants of the same person before other rules run.
+    entities = _dedup_persons(entities)
+
     # Pre-compute whether any PERSON_NAME survived to this point.
     has_person = any(e["type"] == "PERSON_NAME" for e in entities)
 
@@ -149,49 +193,49 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             if not has_person:
                 continue
 
-        # SYSTEM_IDENTIFIER: must be at least 6 chars — shorter values are
-        # abbreviations (J. Keller, IT, DLP) not real system identifiers.
-        # Also drop BIC codes (all-alpha 8-11 chars) and company registry numbers.
+        # SYSTEM_IDENTIFIER: drop BIC codes, registry entries, and pure
+        # single-word strings. Allow multi-word system names (Document Management
+        # Portal) even without digits — these are real system identifiers.
         if ent["type"] == "SYSTEM_IDENTIFIER":
             if len(val.strip()) < 6:
                 continue
-            # BIC codes: 8-11 uppercase alpha chars (BNPAFRPPXXX etc.)
             clean = val.replace(" ", "")
             if 8 <= len(clean) <= 11 and clean.isalpha() and clean.upper() == clean:
                 continue
-            # Company registry entries (HRB/HRA + number)
             if val.upper().startswith(("HRB", "HRA")):
                 continue
+            # Single-word values with no digit/separator are almost always noise.
+            words = val.strip().split()
+            if len(words) == 1 and not _SYS_ID_PATTERN.search(val):
+                continue
 
-        # PHONE_NUMBER: must contain at least 7 digits — filters partial matches
-        # and noise like "49" or short extension numbers.
-        # Also drop values that look like IBAN fragments (spaces every 4 digits).
+        # PHONE_NUMBER: must contain at least 7 digits; drop IBAN fragments.
         if ent["type"] == "PHONE_NUMBER":
             digits = sum(c.isdigit() for c in val)
             if digits < 7:
                 continue
-            # IBAN fragment: digit-only string with uniform 2/4-char grouping
-            # e.g. "0044 0532 0130 00" — not a real phone number.
             stripped = val.replace(" ", "")
             if stripped.isdigit():
                 parts = val.strip().split()
                 if len(parts) > 1 and all(len(p) in (2, 4) for p in parts):
                     continue
 
-        # GERMAN_VAT_ID: LLM sometimes tags foreign VAT numbers (FR..., GB...)
-        # as GERMAN_VAT_ID. Enforce the DE+9-digit format.
+        # GERMAN_VAT_ID: enforce DE+9-digit format — blocks FR/GB VAT tagged by LLM.
         if ent["type"] == "GERMAN_VAT_ID":
             if not _re.match(r"^DE\d{9}$", val.replace(" ", "")):
                 continue
 
-        # DEPARTMENT: drop pipe-separated compound values — these are formatting
-        # artefacts where two department names got merged ("Personalwesen | HR Dept").
-        if ent["type"] == "DEPARTMENT" and "|" in val:
-            continue
-
-        # DEPARTMENT is only meaningful when a person is identified in the same doc.
-        if ent["type"] == "DEPARTMENT" and not has_person:
-            continue
+        # DEPARTMENT: consolidated rules.
+        if ent["type"] == "DEPARTMENT":
+            # Pipe-separated compound values are formatting artefacts.
+            if "|" in val:
+                continue
+            # Only meaningful when a person is also in the same finding.
+            if not has_person:
+                continue
+            # In supplier docs, buyer-side labels ("Purchasing Department") are noise.
+            if document_type == "supplier_onboarding" and "department" in val.lower():
+                continue
 
         kept.append(ent)
     return kept
@@ -582,6 +626,7 @@ def _scan_one_file(
             master_of_data_id=master_of_data_id,
             owner_type=owner_type,
             scan_timestamp=scan_timestamp.replace(tzinfo=None),
+            document_year=_extract_document_year(full_text),
         )
         s.add(finding)
         s.flush()
@@ -643,6 +688,27 @@ def _upsert_file_only(fm: FileMeta, sha: str, owner_user_id: Optional[str]) -> N
             existing.sha256 = sha
             existing.owner_user_id = owner_user_id
             existing.last_scanned_at = now
+
+
+def _extract_document_year(text: str) -> Optional[int]:
+    """Extract the most likely document creation year from its text content.
+
+    Strategy: find 4-digit years in the range 1990–current year, return the
+    earliest one (most likely the document's own date, not a reference date).
+    Conservative: only return a year if it appears in a date-like context.
+    """
+    import datetime as _dt
+    current_year = _dt.date.today().year
+    # Match years in date contexts: "2018", "May 2018", "05.2018", "2018-05-10"
+    candidates = _re.findall(
+        r"\b((?:19|20)\d{2})\b",
+        text,
+    )
+    years = [int(y) for y in candidates if 1990 <= int(y) <= current_year]
+    if not years:
+        return None
+    # Return the earliest year — most likely the document's own creation date.
+    return min(years)
 
 
 # ---------------------------------------------------------------------------

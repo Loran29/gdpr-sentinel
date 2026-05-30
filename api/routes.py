@@ -591,9 +591,13 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
 
     for f, fl in unique:
         years = RETENTION_YEARS_MAP.get(f.document_type, 3)
-        deadline = f.scan_timestamp.replace(
-            year=f.scan_timestamp.year + years
-        )
+        # Use document_year if extracted; fall back to scan_timestamp year.
+        # This ensures Old_Expense_2018.pdf shows deadline 2028, not 2036.
+        base_year = f.document_year if f.document_year else f.scan_timestamp.year
+        try:
+            deadline = f.scan_timestamp.replace(year=base_year + years)
+        except ValueError:
+            deadline = f.scan_timestamp.replace(year=f.scan_timestamp.year + years)
 
         owner_name: Optional[str] = None
         if f.owner_user_id:
