@@ -1,7 +1,6 @@
 "use client";
 
 import { LogOut, Shield } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UserSwitcher } from "@/components/user-switcher";
@@ -25,9 +24,12 @@ export function TopBar({ on_open_run_scan }: { on_open_run_scan: () => void }) {
         <div className="flex items-center gap-2.5">
           <ThemeSwitcher />
           <UserSwitcher />
-          <Badge className="border-slate-300 bg-slate-100 uppercase text-slate-700 dark:bg-slate-700 dark:text-slate-300">Mock mode</Badge>
+          <span className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 dark:bg-amber-400" />
+            Mock mode
+          </span>
           <Button onClick={on_open_run_scan}>Run new scan</Button>
-          <Button variant="outline" onClick={logout} className="gap-1.5">
+          <Button variant="destructive" onClick={logout} className="gap-1.5">
             <LogOut className="h-3.5 w-3.5" />
             Logout
           </Button>
