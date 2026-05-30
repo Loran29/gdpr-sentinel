@@ -70,38 +70,57 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
 
         # PERSON_NAME rules.
         if ent["type"] == "PERSON_NAME":
-            # Must contain at least one space — real names are first + last.
-            # Single-word hits are almost always German nouns (Montag, Tür, Tel).
             if " " not in val:
                 continue
-            # No name is longer than 5 words (catches phrase extractions like
-            # "Zahlungen von meinem Konto" or "Rue de la Paix").
             if len(val.split()) > 5:
                 continue
-            # Must not be a known department name.
             if val.strip() in DEPARTMENT_BLOCKLIST:
                 continue
-            # Must start with an uppercase letter.
             if not val[0].isupper():
                 continue
 
         # ORGANIZATION_NAME rules.
         if ent["type"] == "ORGANIZATION_NAME":
-            # Short all-caps abbreviations (EU, VAT, IBAN, HRB) are not orgs.
             if len(val) <= 4 and val.upper() == val:
                 continue
-            # Paragraph-length extractions are not org names.
             if len(val) > 80:
                 continue
-            # Only meaningful in supplier_onboarding.
             if document_type != "supplier_onboarding":
                 continue
 
-        # FINANCIAL_AMOUNT only personal data in financial document types.
-        if ent["type"] == "FINANCIAL_AMOUNT" and document_type not in (
-            "expense_report", "supplier_onboarding", "financial_authorization"
-        ):
-            continue
+        # FINANCIAL_AMOUNT: only personal data in financial doc types AND only
+        # when a named person appears in the same document.
+        if ent["type"] == "FINANCIAL_AMOUNT":
+            if document_type not in ("expense_report", "supplier_onboarding", "financial_authorization"):
+                continue
+            if not has_person:
+                continue
+
+        # SYSTEM_IDENTIFIER: must be at least 6 chars — shorter values are
+        # abbreviations (J. Keller, IT, DLP) not real system identifiers.
+        # Also drop BIC codes (all-alpha 8-11 chars) and company registry numbers.
+        if ent["type"] == "SYSTEM_IDENTIFIER":
+            if len(val.strip()) < 6:
+                continue
+            # BIC codes: 8-11 uppercase alpha chars (BNPAFRPPXXX etc.)
+            clean = val.replace(" ", "")
+            if 8 <= len(clean) <= 11 and clean.isalpha() and clean.upper() == clean:
+                continue
+            # Company registry entries (HRB/HRA + number)
+            if val.upper().startswith(("HRB", "HRA")):
+                continue
+
+        # PHONE_NUMBER: must contain at least 7 digits — filters partial matches
+        # and noise like "49" or short extension numbers.
+        # Also drop values that look like IBAN fragments (spaces every 4 digits).
+        if ent["type"] == "PHONE_NUMBER":
+            digits = sum(c.isdigit() for c in val)
+            if digits < 7:
+                continue
+            # IBAN fragment: only digits and spaces, groups of 4 (e.g. "0044 0532 0130 00")
+            stripped = val.replace(" ", "")
+            if stripped.isdigit() and not val.startswith(("+", "0")):
+                continue
 
         # DEPARTMENT is only meaningful when a person is identified in the same doc.
         if ent["type"] == "DEPARTMENT" and not has_person:
