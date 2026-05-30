@@ -25,7 +25,7 @@ export function TopBar({ on_open_run_scan }: { on_open_run_scan: () => void }) {
         <div className="flex items-center gap-2.5">
           <ThemeSwitcher />
           <UserSwitcher />
-          <Badge className="border-slate-300 bg-slate-100 uppercase text-slate-700">Mock mode</Badge>
+          <Badge className="border-slate-300 bg-slate-100 uppercase text-slate-700 dark:bg-slate-700 dark:text-slate-300">Mock mode</Badge>
           <Button onClick={on_open_run_scan}>Run new scan</Button>
           <Button variant="outline" onClick={logout} className="gap-1.5">
             <LogOut className="h-3.5 w-3.5" />

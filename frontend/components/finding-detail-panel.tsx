@@ -50,7 +50,7 @@ export function FindingDetailPanel({
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-border_grey bg-slate-50 p-3">
+        <div className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
           <p className="text-xs uppercase tracking-wide text-text_medium">file_name</p>
           <p className="font-medium text-text_dark">{finding.file_name}</p>
           <p className="text-xs uppercase tracking-wide text-text_medium">file_path</p>
@@ -81,12 +81,12 @@ export function FindingDetailPanel({
 
         <Separator />
 
-        <div className="rounded-lg border border-border_grey bg-slate-50 p-3">
+        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">Reasoning</p>
           <p className="text-sm text-text_dark">{finding.reasoning}</p>
         </div>
 
-        <div className="rounded-lg border border-border_grey bg-slate-50 p-3">
+        <div className="rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">
             Retention recommendation
           </p>
@@ -107,7 +107,7 @@ export function FindingDetailPanel({
 
         <Separator />
 
-        <div className="space-y-2 rounded-lg border border-border_grey bg-slate-50 p-3">
+        <div className="space-y-2 rounded-lg border border-border_grey bg-slate-50 p-3 dark:bg-slate-800/50">
           <p className="text-xs font-semibold uppercase tracking-wide text-text_medium">Review note</p>
           <Textarea
             placeholder="Add context before applying review action"

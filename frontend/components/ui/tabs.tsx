@@ -9,7 +9,7 @@ export function Tabs({ className, children }: { className?: string; children: Re
 
 export function TabsList({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className={cn("inline-flex rounded-lg border border-border_grey bg-slate-50 p-0.5", className)}>
+    <div className={cn("inline-flex rounded-lg border border-border_grey bg-slate-50 p-0.5 dark:bg-slate-800", className)}>
       {children}
     </div>
   );
@@ -30,7 +30,7 @@ export function TabsTrigger({
     <button
       className={cn(
         "rounded-md px-3 py-1.5 text-xs font-semibold uppercase tracking-wide transition-colors",
-        active ? "bg-card_bg text-text_dark shadow-sm" : "text-text_medium hover:bg-slate-100 hover:text-text_dark",
+        active ? "bg-card_bg text-text_dark shadow-sm" : "text-text_medium hover:bg-slate-100 hover:text-text_dark dark:hover:bg-slate-700",
         className
       )}
       onClick={onClick}

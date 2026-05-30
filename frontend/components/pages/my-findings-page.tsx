@@ -166,7 +166,7 @@ export function MyFindingsPage() {
                           className={
                             active
                               ? "cursor-pointer border-l-2 border-l-bosch_red bg-bosch_red/5"
-                              : "cursor-pointer hover:bg-slate-50"
+                              : "cursor-pointer hover:bg-slate-50 dark:bg-slate-800/50"
                           }
                           onClick={() => {
                             set_selected_finding_id(finding.id);

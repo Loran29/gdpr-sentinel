@@ -70,13 +70,13 @@ export function AuditLogPage() {
                 entries.map((entry, index) => (
                   <TableRow
                     key={entry.id ?? `${entry.finding_id}_${index}`}
-                    className={index % 2 === 0 ? "bg-white hover:bg-slate-50" : "bg-slate-50/35 hover:bg-slate-50"}
+                    className={index % 2 === 0 ? "bg-white hover:bg-slate-50 dark:bg-slate-800/50" : "bg-slate-50/35 dark:bg-slate-800/30 hover:bg-slate-50 dark:bg-slate-800/50"}
                   >
                     <TableCell className="whitespace-nowrap font-medium text-text_dark">
                       {format_timestamp(entry.timestamp)}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center rounded-md border border-border_grey bg-slate-50 px-2 py-0.5 text-sm font-medium text-text_dark">
+                      <span className="inline-flex items-center rounded-md border border-border_grey bg-slate-50 px-2 py-0.5 dark:bg-slate-800/50 text-sm font-medium text-text_dark">
                         {entry.finding_id}
                       </span>
                     </TableCell>

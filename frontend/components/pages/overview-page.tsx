@@ -30,7 +30,7 @@ export function OverviewPage() {
           <div className="flex flex-wrap items-center gap-2">
             {architecture_strip_steps.map((step, index) => (
               <div key={step} className="flex items-center gap-2">
-                <span className="rounded-md border border-border_grey bg-slate-50 px-3 py-1 text-xs text-text_dark">
+                <span className="rounded-md border border-border_grey bg-slate-50 px-3 py-1 dark:bg-slate-800/50 text-xs text-text_dark">
                   {step}
                 </span>
                 {index < architecture_strip_steps.length - 1 ? (

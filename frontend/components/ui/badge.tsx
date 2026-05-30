@@ -12,7 +12,7 @@ export function Badge({
     variant === "default"
       ? "border-slate-300 bg-slate-100 text-slate-800"
       : variant === "secondary"
-        ? "border-slate-300 bg-slate-100 text-slate-700"
+        ? "border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
         : "border-border_grey bg-card_bg text-text_dark";
 
   return (

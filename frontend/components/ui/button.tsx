@@ -11,7 +11,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 
 const variant_classes: Record<ButtonVariant, string> = {
   default: "border border-bosch_red bg-bosch_red text-white shadow-sm hover:bg-red-700",
-  outline: "border border-border_grey bg-card_bg text-text_dark hover:bg-slate-50",
+  outline: "border border-border_grey bg-card_bg text-text_dark hover:bg-slate-50 dark:bg-slate-800/50",
   secondary: "border border-slate-700 bg-charcoal text-white shadow-sm hover:bg-slate-700",
   destructive: "border border-bosch_red bg-bosch_red text-white shadow-sm hover:bg-red-800"
 };

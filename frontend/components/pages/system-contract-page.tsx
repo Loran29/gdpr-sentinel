@@ -15,16 +15,16 @@ export function SystemContractPage() {
             <CardTitle>Runtime settings</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-text_dark">
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">
               API base URL: <span className="font-mono">http://localhost:8000</span>
             </p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">Mock mode enabled</p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">Mock mode enabled</p>
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">
               Source of truth: <span className="font-mono">CONTRACT.md</span>
             </p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">Data model naming: snake_case</p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">IDs are strings</p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">Data model naming: snake_case</p>
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">IDs are strings</p>
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">
               Timestamps are ISO 8601 UTC with Z suffix
             </p>
           </CardContent>
@@ -35,13 +35,13 @@ export function SystemContractPage() {
             <CardTitle>Future fetch examples</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-xs text-text_dark">
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 font-mono">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 dark:bg-slate-800/50 font-mono">
               {'fetch("http://localhost:8000/admin/dashboard")'}
             </p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 font-mono">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 dark:bg-slate-800/50 font-mono">
               {'fetch("http://localhost:8000/admin/owners")'}
             </p>
-            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 font-mono">
+            <p className="rounded-lg border border-border_grey/70 bg-slate-50 p-2.5 dark:bg-slate-800/50 font-mono">
               {'fetch("http://localhost:8000/findings/by-user/u_001?status=pending")'}
             </p>
           </CardContent>
@@ -55,7 +55,7 @@ export function SystemContractPage() {
         <CardContent>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
             {api_endpoints.map((endpoint) => (
-              <div key={endpoint} className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
+              <div key={endpoint} className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">
                 <p className="font-mono text-xs text-text_dark">{endpoint}</p>
               </div>
             ))}
@@ -69,7 +69,7 @@ export function SystemContractPage() {
         </CardHeader>
         <CardContent className="space-y-2 text-sm text-text_dark">
           {out_of_scope_items.map((item) => (
-            <p key={item} className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2">
+            <p key={item} className="rounded-lg border border-border_grey/70 bg-slate-50 px-2.5 py-2 dark:bg-slate-800/50">
               {item}
             </p>
           ))}

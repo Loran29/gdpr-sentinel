@@ -18,7 +18,7 @@ type StatusKind =
   | "master_of_data";
 
 export function StatusBadge({ value, size = "default" }: { value: StatusKind; size?: "default" | "large" }) {
-  let class_name = "border-slate-300 bg-slate-100 text-slate-700";
+  let class_name = "border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
 
   if (value === "pending") {
     class_name = "border-warning_yellow/45 bg-warning_yellow/20 text-amber-900";
@@ -43,7 +43,7 @@ export function StatusBadge({ value, size = "default" }: { value: StatusKind; si
   } else if (value === "master_of_data") {
     class_name = "border-master_purple/40 bg-master_purple/15 text-master_purple";
   } else if (value === "direct") {
-    class_name = "border-slate-300 bg-slate-100 text-slate-700";
+    class_name = "border-slate-300 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
   }
 
   const size_class_name = size === "large" ? "h-6 px-2.5 text-xs whitespace-nowrap" : "whitespace-nowrap";
