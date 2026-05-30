@@ -145,6 +145,13 @@ class HealthDetailOut(BaseModel):
     db_findings: int
     db_files: int
     db_scans: int
+    # Frontend-compatible ResourceHealth fields
+    cpu_load_pct: float = 0.0
+    memory_peak_mb: float = 0.0
+    files_skipped: int = 0
+    text_extraction_avoided: int = 0
+    llm_calls_skipped_in_delta_scan: int = 0
+    checked_at: str = ""
 
 
 class RetentionFileOut(BaseModel):
@@ -174,13 +181,24 @@ class RetentionFileOut(BaseModel):
     review_status: str
 
 
+class RetentionViewRow(BaseModel):
+    document_type: str
+    retention_recommendation: str
+    findings_count: int
+
+
 class RetentionSummaryOut(BaseModel):
-    past_deadline: list[RetentionFileOut]
-    expiring_within_1_year: list[RetentionFileOut]
-    compliant: list[RetentionFileOut]
-    total_past_deadline: int
-    total_expiring_soon: int
-    total_compliant: int
+    # Frontend-compatible shape
+    generated_at: datetime
+    total_findings: int
+    rows: list[RetentionViewRow]
+    # Extended fields for the debug UI / future use
+    past_deadline: list[RetentionFileOut] = []
+    expiring_within_1_year: list[RetentionFileOut] = []
+    compliant: list[RetentionFileOut] = []
+    total_past_deadline: int = 0
+    total_expiring_soon: int = 0
+    total_compliant: int = 0
 
 
 class DashboardStatsOut(_Base):
@@ -272,13 +290,15 @@ class ScanCompareOut(BaseModel):
 
 
 class AuditEntryOut(BaseModel):
+    id: str
+    timestamp: str
     finding_id: str
     file_name: str
+    user: str
     action: str
-    reviewed_by_user_id: Optional[str]
-    reviewer_name: Optional[str]
-    reviewed_at: Optional[datetime]
-    note: Optional[str]
+    review_note: str = ""
+    resulting_status: str
+    reviewed_by_user_id: Optional[str] = None
 
 
 class FileSummaryOut(BaseModel):

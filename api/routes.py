@@ -36,6 +36,7 @@ from api.schemas import (
     RetentionNotifyRequest,
     RetentionNotifyResult,
     RetentionSummaryOut,
+    RetentionViewRow,
     ScanCompareOut,
     ScanDeltaResponse,
     ScanDiffFile,
@@ -98,6 +99,15 @@ def health_detail(db: Session = Depends(get_db)) -> HealthDetailOut:
     db_files    = db.execute(select(func.count()).select_from(File)).scalar_one()
     db_scans    = db.execute(select(func.count()).select_from(Scan)).scalar_one()
 
+    import time as _time
+
+    # Pull files_skipped from latest completed scan for the ResourceHealth fields.
+    last_scan = db.execute(
+        select(Scan).where(Scan.status == "completed").order_by(desc(Scan.completed_at)).limit(1)
+    ).scalar_one_or_none()
+    files_skipped = last_scan.files_skipped if last_scan else 0
+    llm_calls_skipped = last_scan.files_skipped if last_scan else 0
+
     return HealthDetailOut(
         status="ok",
         uptime_sec=round(time.perf_counter() - _SERVER_START, 1),
@@ -109,6 +119,12 @@ def health_detail(db: Session = Depends(get_db)) -> HealthDetailOut:
         db_findings=int(db_findings),
         db_files=int(db_files),
         db_scans=int(db_scans),
+        cpu_load_pct=round(psutil.cpu_percent(interval=0.1), 1),
+        memory_peak_mb=round(rss_mb, 1),
+        files_skipped=int(files_skipped),
+        text_extraction_avoided=int(files_skipped),
+        llm_calls_skipped_in_delta_scan=int(llm_calls_skipped),
+        checked_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -715,7 +731,20 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
     # Sort past_deadline by most overdue first.
     past.sort(key=lambda x: x.days_overdue or 0, reverse=True)
 
+    # Build frontend-compatible rows (grouped by document_type + retention_recommendation).
+    from collections import defaultdict as _dd
+    row_map: dict[str, dict] = _dd(lambda: {"findings_count": 0, "retention_recommendation": ""})
+    for item in past + expiring + compliant:
+        key = item.document_type
+        row_map[key]["document_type"] = item.document_type
+        row_map[key]["retention_recommendation"] = item.document_type.replace("_", " ").title() + " retention applies"
+        row_map[key]["findings_count"] += 1
+    rows = [RetentionViewRow(**v) for v in row_map.values()]
+
     return RetentionSummaryOut(
+        generated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+        total_findings=len(past) + len(expiring) + len(compliant),
+        rows=rows,
         past_deadline=past,
         expiring_within_1_year=expiring,
         compliant=compliant,
@@ -1035,9 +1064,15 @@ def admin_audit(
             if u:
                 reviewer_name = u.name
         result.append(AuditEntryOut(
-            finding_id=f.id, file_name=fl.name, action=f.review_status,
-            reviewed_by_user_id=f.reviewed_by_user_id, reviewer_name=reviewer_name,
-            reviewed_at=f.reviewed_at, note=f.review_note,
+            id=f"audit_{f.id}",
+            timestamp=f.reviewed_at.isoformat() if f.reviewed_at else datetime.now(timezone.utc).isoformat(),
+            finding_id=f.id,
+            file_name=fl.name,
+            user=reviewer_name or f.reviewed_by_user_id or "Unknown",
+            action=f.review_status.replace("_", " ").title(),
+            review_note=f.review_note or "",
+            resulting_status=f.review_status,
+            reviewed_by_user_id=f.reviewed_by_user_id,
         ))
     return result
 
