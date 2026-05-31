@@ -5,7 +5,7 @@ Frontend imports types generated from these models via datamodel-code-generator.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,6 +23,20 @@ from core.enums import (
 
 class _Base(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    @staticmethod
+    def _utc(dt: datetime) -> datetime:
+        """Ensure a naive datetime is treated as UTC before serialization."""
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
+    def model_post_init(self, __context: object) -> None:
+        # Stamp all naive datetime fields as UTC so Pydantic serializes them with Z.
+        for field_name, field_info in self.model_fields.items():
+            val = getattr(self, field_name, None)
+            if isinstance(val, datetime) and val.tzinfo is None:
+                object.__setattr__(self, field_name, val.replace(tzinfo=timezone.utc))
 
 
 # ---------------------------------------------------------------------------

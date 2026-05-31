@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { SidebarNav } from "@/components/sidebar-nav";
 import { TopBar } from "@/components/top-bar";
 import { RunScanDialog } from "@/components/run-scan-dialog";
@@ -17,6 +18,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [login_user_id, set_login_user_id] = useState("");
   const [login_password, set_login_password] = useState("");
   const [show_password_error, set_show_password_error] = useState(false);
+  const [show_password, set_show_password] = useState(false);
 
   const default_user_id = useMemo(() => users[0]?.id ?? "", [users]);
 
@@ -156,20 +158,28 @@ export function AppShell({ children }: { children: ReactNode }) {
                       <label className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                         Password
                       </label>
-                      <span className="text-[11px] text-slate-400">Any value accepted (demo)</span>
                     </div>
-                    <Input
-                      type="password"
-                      value={login_password}
-                      onChange={(event) => {
-                        const next_password = event.target.value;
-                        set_login_password(next_password);
-                        if (next_password.trim()) set_show_password_error(false);
-                      }}
-                      onKeyDown={(e) => { if (e.key === "Enter") handle_sign_in(); }}
-                      placeholder="••••••••"
-                      className="h-11 border-slate-200 focus:border-[#005691] focus:ring-[#005691]/20"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={show_password ? "text" : "password"}
+                        value={login_password}
+                        onChange={(event) => {
+                          const next_password = event.target.value;
+                          set_login_password(next_password);
+                          if (next_password.trim()) set_show_password_error(false);
+                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") handle_sign_in(); }}
+                        className="h-11 border-slate-200 pr-10 focus:border-[#005691] focus:ring-[#005691]/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => set_show_password(!show_password)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        tabIndex={-1}
+                      >
+                        {show_password ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                     {show_password_error ? (
                       <p className="flex items-center gap-1 text-xs font-medium text-red-600">
                         <svg className="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>

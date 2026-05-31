@@ -12,7 +12,7 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:
 
 type UploadState = "idle" | "uploading" | "scanning" | "done" | "error";
 
-export function UploadScanCard() {
+export function UploadScanCard({ embedded = false }: { embedded?: boolean }) {
   const { append_scan, users } = use_app_state();
   const [state, set_state] = useState<UploadState>("idle");
   const [files, set_files] = useState<File[]>([]);
@@ -108,135 +108,140 @@ export function UploadScanCard() {
 
   const assigned_user = users.find(u => u.id === assign_to);
 
+  const inner = (
+    <div className="space-y-3">
+      {/* Drop zone */}
+      {(state === "idle" || state === "error") && (
+        <div
+          ref={drop_ref}
+          onDrop={handle_drop}
+          onDragOver={e => e.preventDefault()}
+          onClick={() => input_ref.current?.click()}
+          className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border_grey py-8 text-center transition-colors hover:border-bosch_blue/50 hover:bg-bosch_blue/5"
+        >
+          <Upload className="mb-2 h-8 w-8 text-text_medium" />
+          <p className="text-sm font-medium text-text_dark">Drop PDFs or Word docs here or click to browse</p>
+          <p className="mt-1 text-xs text-text_medium">Supports .pdf and .docx · multiple files at once</p>
+          <input ref={input_ref} type="file" accept=".pdf,.docx" multiple className="hidden"
+            onChange={e => e.target.files && handle_files(e.target.files)} />
+        </div>
+      )}
+
+      {/* File list */}
+      {files.length > 0 && state === "idle" && (
+        <div className="space-y-1">
+          {files.map(f => (
+            <div key={f.name} className="flex items-center justify-between rounded-md border border-border_grey px-2.5 py-1.5">
+              <span className="min-w-0 truncate font-mono text-[12px] text-text_dark">{f.name}</span>
+              <span className="ml-2 shrink-0 text-xs text-text_medium">{(f.size / 1024).toFixed(0)} KB</span>
+              <button onClick={() => remove_file(f.name)} className="ml-2 shrink-0 text-text_medium hover:text-bosch_red">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Assign to user picker */}
+      {files.length > 0 && state === "idle" && (
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold uppercase tracking-wide text-text_medium">
+            Assign findings to
+          </label>
+          <Select value={assign_to} onChange={e => set_assign_to(e.target.value)}>
+            <SelectItem value="">— No assignment (catch-all MoD) —</SelectItem>
+            {users.map(u => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.name} ({u.role === "admin" ? "Admin" : "Employee"})
+              </SelectItem>
+            ))}
+          </Select>
+          {assign_to && (
+            <p className="text-xs text-text_medium">
+              Findings will appear in <span className="font-medium text-text_dark">{assigned_user?.name}</span>&apos;s review queue after scanning.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Scan button */}
+      {files.length > 0 && state === "idle" && (
+        <button
+          onClick={start_upload}
+          className="w-full rounded-lg bg-bosch_red py-2 text-sm font-medium text-white transition-colors hover:bg-bosch_red/90"
+        >
+          Scan {files.length} file{files.length > 1 ? "s" : ""}
+          {assign_to ? ` → ${assigned_user?.name}` : ""}
+        </button>
+      )}
+
+      {/* Uploading */}
+      {state === "uploading" && (
+        <div className="flex items-center gap-2 text-sm text-text_medium">
+          <Loader2 className="h-4 w-4 animate-spin text-bosch_blue" />
+          Uploading files...
+        </div>
+      )}
+
+      {/* Scanning progress */}
+      {state === "scanning" && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-bosch_blue">Scanning for personal data...</span>
+            <span className="font-mono text-xs text-text_medium">{progress}%</span>
+          </div>
+          <Progress value={progress} />
+          {current_file && (
+            <p className="truncate font-mono text-xs text-text_medium">Processing: {current_file}</p>
+          )}
+        </div>
+      )}
+
+      {/* Done */}
+      {state === "done" && (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 dark:border-emerald-500/40 dark:bg-emerald-500/10">
+            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+              Scan complete — {findings_count} file{findings_count !== 1 ? "s" : ""} with findings
+            </p>
+            <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-400">
+              {assign_to
+                ? `Findings assigned to ${assigned_user?.name}. Log in as them to review.`
+                : "Results visible in the admin dashboard."}
+            </p>
+          </div>
+          <button
+            onClick={reset}
+            className="w-full rounded-lg border border-border_grey py-2 text-sm font-medium text-text_dark transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
+          >
+            Upload more files
+          </button>
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <p className="rounded-md border border-red-300 bg-red-50 px-2.5 py-2 text-xs text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+
+  if (embedded) return inner;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileUp className="h-4 w-4 text-bosch_blue" />
-          Upload & scan
+          Upload &amp; scan
         </CardTitle>
         <p className="text-xs text-text_medium">
           Drop PDF or Word files to scan for personal data. Assign findings to a user so they appear in their review queue.
         </p>
       </CardHeader>
-      <CardContent className="space-y-3">
-
-        {/* Drop zone */}
-        {(state === "idle" || state === "error") && (
-          <div
-            ref={drop_ref}
-            onDrop={handle_drop}
-            onDragOver={e => e.preventDefault()}
-            onClick={() => input_ref.current?.click()}
-            className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border_grey py-8 text-center transition-colors hover:border-bosch_blue/50 hover:bg-bosch_blue/5"
-          >
-            <Upload className="mb-2 h-8 w-8 text-text_medium" />
-            <p className="text-sm font-medium text-text_dark">Drop PDFs or Word docs here or click to browse</p>
-            <p className="mt-1 text-xs text-text_medium">Supports .pdf and .docx · multiple files at once</p>
-            <input ref={input_ref} type="file" accept=".pdf,.docx" multiple className="hidden"
-              onChange={e => e.target.files && handle_files(e.target.files)} />
-          </div>
-        )}
-
-        {/* File list */}
-        {files.length > 0 && state === "idle" && (
-          <div className="space-y-1">
-            {files.map(f => (
-              <div key={f.name} className="flex items-center justify-between rounded-md border border-border_grey px-2.5 py-1.5">
-                <span className="min-w-0 truncate font-mono text-[12px] text-text_dark">{f.name}</span>
-                <span className="ml-2 shrink-0 text-xs text-text_medium">{(f.size / 1024).toFixed(0)} KB</span>
-                <button onClick={() => remove_file(f.name)} className="ml-2 shrink-0 text-text_medium hover:text-bosch_red">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Assign to user picker */}
-        {files.length > 0 && state === "idle" && (
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold uppercase tracking-wide text-text_medium">
-              Assign findings to
-            </label>
-            <Select value={assign_to} onChange={e => set_assign_to(e.target.value)}>
-              <SelectItem value="">— No assignment (catch-all MoD) —</SelectItem>
-              {users.map(u => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.name} ({u.role === "admin" ? "Admin" : "Employee"})
-                </SelectItem>
-              ))}
-            </Select>
-            {assign_to && (
-              <p className="text-xs text-text_medium">
-                Findings will appear in <span className="font-medium text-text_dark">{assigned_user?.name}</span>&apos;s review queue after scanning.
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Scan button */}
-        {files.length > 0 && state === "idle" && (
-          <button
-            onClick={start_upload}
-            className="w-full rounded-lg bg-bosch_red py-2 text-sm font-medium text-white transition-colors hover:bg-bosch_red/90"
-          >
-            Scan {files.length} file{files.length > 1 ? "s" : ""}
-            {assign_to ? ` → ${assigned_user?.name}` : ""}
-          </button>
-        )}
-
-        {/* Uploading */}
-        {state === "uploading" && (
-          <div className="flex items-center gap-2 text-sm text-text_medium">
-            <Loader2 className="h-4 w-4 animate-spin text-bosch_blue" />
-            Uploading files...
-          </div>
-        )}
-
-        {/* Scanning progress */}
-        {state === "scanning" && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium text-bosch_blue">Scanning for personal data...</span>
-              <span className="font-mono text-xs text-text_medium">{progress}%</span>
-            </div>
-            <Progress value={progress} />
-            {current_file && (
-              <p className="truncate font-mono text-xs text-text_medium">Processing: {current_file}</p>
-            )}
-          </div>
-        )}
-
-        {/* Done */}
-        {state === "done" && (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 dark:border-emerald-500/40 dark:bg-emerald-500/10">
-              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-                Scan complete — {findings_count} file{findings_count !== 1 ? "s" : ""} with findings
-              </p>
-              <p className="mt-0.5 text-xs text-emerald-600 dark:text-emerald-400">
-                {assign_to
-                  ? `Findings assigned to ${assigned_user?.name}. Log in as them to review.`
-                  : "Results visible in the admin dashboard."}
-              </p>
-            </div>
-            <button
-              onClick={reset}
-              className="w-full rounded-lg border border-border_grey py-2 text-sm font-medium text-text_dark transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              Upload more files
-            </button>
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <p className="rounded-md border border-red-300 bg-red-50 px-2.5 py-2 text-xs text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
-            {error}
-          </p>
-        )}
-      </CardContent>
+      <CardContent>{inner}</CardContent>
     </Card>
   );
 }
