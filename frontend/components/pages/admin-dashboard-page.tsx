@@ -341,67 +341,74 @@ export function AdminDashboardPage() {
         </Card>
       )}
 
-      {/* Action required — always visible (1, 2, 6) */}
+      {/* Action required — always visible */}
       <Card className={all_clear
         ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/5"
         : "border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5"
       }>
         <CardHeader className="pb-2 pt-3">
           <CardTitle className={`flex items-center gap-2 text-sm ${all_clear ? "text-emerald-700 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"}`}>
-            {all_clear
-              ? <CheckCircle className="h-4 w-4" />
-              : <AlertTriangle className="h-4 w-4" />
-            }
+            {all_clear ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
             {all_clear ? "All reviews up to date" : "Action required"}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 pb-3 md:grid-cols-3">
-          <div>
-            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Pending reviews</p>
-            <button
-              onClick={() => router.push("/all-findings?status=pending")}
-              className={`mt-0.5 text-2xl font-semibold tabular-nums transition-opacity hover:opacity-70 ${
-                (stats.pending_reviews_total ?? 0) > 0 ? "text-amber-800 dark:text-amber-300 underline underline-offset-2" : "text-emerald-700 dark:text-emerald-300"
-              }`}
-            >
-              {stats.pending_reviews_total ?? 0}
-            </button>
-            {(stats.pending_reviews_total ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ All reviewed</p>}
-          </div>
-          <div>
-            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Overdue &gt;30 days</p>
-            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
-              {stats.overdue_reviews_count ?? 0}
-            </p>
-            {(stats.overdue_reviews_count ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ No overdue</p>}
-          </div>
-          <div>
-            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Cleanup overdue</p>
-            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
-              {stats.cleanup_overdue_count ?? 0}
-            </p>
-            {(stats.cleanup_overdue_count ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ All clean</p>}
-          </div>
-        </CardContent>
-        {/* Top offenders (6) */}
-        {!all_clear && top_owners.filter(o => o.pending_reviews > 0).length > 0 && (
-          <div className="border-t border-amber-200/60 px-4 pb-3 pt-2 dark:border-amber-500/20">
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Top pending by owner</p>
+        <CardContent className="pb-3">
+          <div className="grid gap-6 md:grid-cols-3">
             <div className="space-y-1">
-              {top_owners.filter(o => o.pending_reviews > 0).map(o => (
-                <div key={o.user_id} className="flex items-center justify-between">
-                  <span className="text-sm text-text_dark">{o.name}</span>
-                  <button
-                    onClick={() => router.push(`/all-findings?owner=${o.user_id}&status=pending`)}
-                    className="text-sm font-semibold text-amber-700 underline underline-offset-2 hover:opacity-70 dark:text-amber-300"
-                  >
-                    {o.pending_reviews} pending
-                  </button>
-                </div>
-              ))}
+              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Pending reviews</p>
+              <button
+                onClick={() => router.push("/all-findings?status=pending")}
+                className={`text-3xl font-bold tabular-nums transition-opacity hover:opacity-70 ${
+                  (stats.pending_reviews_total ?? 0) > 0 ? "text-amber-800 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"
+                }`}
+              >
+                {stats.pending_reviews_total ?? 0}
+              </button>
+              <p className={`text-xs ${(stats.pending_reviews_total ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-text_medium"}`}>
+                {(stats.pending_reviews_total ?? 0) === 0 ? "✓ All reviewed" : "Click to view →"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Overdue &gt;30 days</p>
+              <p className={`text-3xl font-bold tabular-nums ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
+                {stats.overdue_reviews_count ?? 0}
+              </p>
+              <p className={`text-xs ${(stats.overdue_reviews_count ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-bosch_red"}`}>
+                {(stats.overdue_reviews_count ?? 0) === 0 ? "✓ No overdue" : "GDPR risk — requires attention"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Cleanup overdue</p>
+              <p className={`text-3xl font-bold tabular-nums ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
+                {stats.cleanup_overdue_count ?? 0}
+              </p>
+              <p className={`text-xs ${(stats.cleanup_overdue_count ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-bosch_red"}`}>
+                {(stats.cleanup_overdue_count ?? 0) === 0 ? "✓ All clean" : "Deadline passed — escalated"}
+              </p>
             </div>
           </div>
-        )}
+
+          {/* Top offenders */}
+          {!all_clear && top_owners.filter(o => o.pending_reviews > 0).length > 0 && (
+            <div className="mt-4 border-t border-amber-200/60 pt-3 dark:border-amber-500/20">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400">Top pending by owner</p>
+              <div className="grid gap-2 md:grid-cols-3">
+                {top_owners.filter(o => o.pending_reviews > 0).map(o => (
+                  <button
+                    key={o.user_id}
+                    onClick={() => router.push(`/all-findings?owner=${o.user_id}&status=pending`)}
+                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left transition-colors hover:bg-amber-50 dark:border-amber-500/20 dark:bg-slate-800/50 dark:hover:bg-amber-500/10"
+                  >
+                    <span className="text-sm font-medium text-text_dark">{o.name}</span>
+                    <span className="ml-2 shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                      {o.pending_reviews}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <div className="grid gap-3 xl:grid-cols-[1.6fr_1fr]">
