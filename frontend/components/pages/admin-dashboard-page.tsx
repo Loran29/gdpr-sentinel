@@ -352,11 +352,12 @@ export function AdminDashboardPage() {
             {all_clear ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-500" />}
             {all_clear ? "All reviews up to date" : "Action required"}
           </CardTitle>
+          <p className="text-xs text-text_medium">Review backlog across all sources — not limited to the last scan</p>
         </CardHeader>
         <CardContent className="pb-3">
           <div className="grid gap-6 md:grid-cols-3">
             <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Pending reviews</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Pending reviews · all sources</p>
               <button
                 onClick={() => router.push("/all-findings?status=pending")}
                 className={`text-3xl font-bold tabular-nums transition-opacity hover:opacity-70 ${
