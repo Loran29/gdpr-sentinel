@@ -56,6 +56,20 @@ CUSTOM_REGEX_RECOGNIZERS = [
     (EntityType.POSTAL_CODE.value, re.compile(r"\b\d{5}\b(?=\s+[A-ZÄÖÜ])"), 0.85),
     # German phone numbers: +49 or 0 prefix, various formats.
     (EntityType.PHONE_NUMBER.value, re.compile(r"\+49[\s\-]?[\d][\d\s\-]{6,14}\d|\b0\d{2,4}[\s\-\/]?\d{3,}[\d\s\-]{2,}"), 0.9),
+    # Company names by legal-form suffix (structural, language-agnostic). Matches
+    # 1–4 capitalised words immediately followed by a known EU/intl legal form,
+    # e.g. "Maison Dupont SARL", "Nordic Components GmbH". Downstream
+    # ORGANIZATION_NAME filters still scope this to supplier docs and drop
+    # employer/cert noise, so it only adds recall where an org is expected.
+    (
+        EntityType.ORGANIZATION_NAME.value,
+        re.compile(
+            r"\b(?:[A-ZÄÖÜ][\w&.\-]+\s+){1,3}"
+            r"(?:GmbH|AG|SE|KG|OHG|mbH|UG|SARL|SAS|SA|S\.A\.|BV|B\.V\.|"
+            r"Srl|S\.r\.l\.|SpA|S\.p\.A\.|Ltd|Ltd\.|LLC|Inc|Inc\.|PLC|NV|N\.V\.|Oy|AB|AS)\b"
+        ),
+        0.85,
+    ),
 ]
 
 
