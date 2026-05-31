@@ -474,6 +474,60 @@ def finding_action(
     return _build_finding_out(db, f)
 
 
+@router.get("/findings/all", response_model=list[FindingOut], tags=["Findings"])
+def findings_all(
+    status: Optional[str] = Query(default=None),
+    owner_user_id: Optional[str] = Query(default=None),
+    sensitivity: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> list[FindingOut]:
+    """All findings across all owners — admin view."""
+    q = select(Finding)
+    if status:
+        q = q.where(Finding.review_status == status)
+    if owner_user_id:
+        q = q.where(
+            (Finding.owner_user_id == owner_user_id) |
+            (Finding.master_of_data_id == owner_user_id)
+        )
+    if sensitivity:
+        q = q.where(Finding.sensitivity_level == sensitivity)
+    q = q.order_by(Finding.scan_timestamp.desc()).limit(limit)
+    rows = db.execute(q).scalars().all()
+    return [_build_finding_out(db, f) for f in rows]
+
+
+@router.post("/findings/{finding_id}/reassign", response_model=FindingOut, tags=["Findings"])
+def finding_reassign(
+    finding_id: str = Path(...),
+    new_owner_user_id: str = Query(..., description="User ID to reassign this finding to"),
+    db: Session = Depends(get_db),
+) -> FindingOut:
+    """Reassign a finding to a different owner (admin action)."""
+    f = db.execute(select(Finding).where(Finding.id == finding_id)).scalar_one_or_none()
+    if f is None:
+        raise FindingNotFoundError(f"No finding with id '{finding_id}' exists", {"finding_id": finding_id})
+
+    new_user = db.execute(select(User).where(User.id == new_owner_user_id)).scalar_one_or_none()
+    if new_user is None:
+        raise UserNotFoundError(f"No user with id '{new_owner_user_id}' exists", {"user_id": new_owner_user_id})
+
+    # Update the finding
+    f.owner_user_id = new_owner_user_id
+    f.owner_type = OwnerType.DIRECT.value
+    f.master_of_data_id = None
+
+    # Also update the file row so future scans route correctly
+    file_row = db.execute(select(File).where(File.id == f.file_id)).scalar_one_or_none()
+    if file_row is not None:
+        file_row.owner_user_id = new_owner_user_id
+
+    db.commit()
+    db.refresh(f)
+    return _build_finding_out(db, f)
+
+
 @router.post("/files/{file_id}/rescan", tags=["Files"])
 def file_rescan(file_id: str = Path(...), db: Session = Depends(get_db)) -> dict:
     file_row = db.execute(select(File).where(File.id == file_id)).scalar_one_or_none()

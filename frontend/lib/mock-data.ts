@@ -14,6 +14,7 @@ export const app_nav_items = [
   { href: "/run-scan", label: "Run scan" },
   { href: "/my-findings", label: "My findings" },
   { href: "/admin-dashboard", label: "Admin dashboard" },
+  { href: "/all-findings", label: "All findings" },
   { href: "/data-owners", label: "Data owners" },
   { href: "/audit-log", label: "Audit log" }
 ] as const;

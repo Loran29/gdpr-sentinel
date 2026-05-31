@@ -532,3 +532,30 @@ export function get_supported_api_endpoints() {
 export function get_api_mode(): ApiClientSource {
   return api_runtime_config.mock_mode ? "mock" : "api";
 }
+
+export async function get_all_findings(filters?: {
+  status?: string;
+  owner_user_id?: string;
+  sensitivity?: string;
+}): Promise<Finding[]> {
+  return query_with_fallback<Finding[]>({
+    path: "/findings/all",
+    query: {
+      status: filters?.status,
+      owner_user_id: filters?.owner_user_id,
+      sensitivity: filters?.sensitivity,
+    },
+    fallback: () => [],
+  });
+}
+
+export async function reassign_finding(
+  finding_id: string,
+  new_owner_user_id: string,
+): Promise<ApiMutationResult<Finding>> {
+  return safe_request<Finding>({
+    path: `/findings/${finding_id}/reassign`,
+    method: "POST",
+    query: { new_owner_user_id },
+  });
+}

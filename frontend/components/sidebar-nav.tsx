@@ -8,6 +8,7 @@ import {
   FileSearch,
   Fingerprint,
   Gauge,
+  LayoutList,
   Users
 } from "lucide-react";
 import { app_nav_items } from "@/lib/mock-data";
@@ -19,6 +20,7 @@ const nav_items_by_href = {
   "/run-scan": { icon: Activity, is_admin_view: true },
   "/my-findings": { icon: FileSearch, is_admin_view: false },
   "/admin-dashboard": { icon: Gauge, is_admin_view: true },
+  "/all-findings": { icon: LayoutList, is_admin_view: true },
   "/data-owners": { icon: Users, is_admin_view: true },
   "/audit-log": { icon: Fingerprint, is_admin_view: true }
 } as const;
