@@ -16,9 +16,23 @@ class LocalFolderConnector(Connector):
     # Subfolders excluded from main scans — used for ad-hoc uploads only.
     _EXCLUDED_DIRS = {"uploads"}
 
-    def __init__(self, root: Path | str, mod_yaml: Path | str | None = None, include_uploads: bool = False) -> None:
+    def __init__(
+        self,
+        root: Path | str,
+        mod_yaml: Path | str | None = None,
+        include_uploads: bool = False,
+        scope_subpath: str | None = None,
+        exclude_subpaths: list[str] | None = None,
+    ) -> None:
         self.root = Path(root).resolve()
         self._include_uploads = include_uploads
+        # Optional scoping applied to the NORMALIZED ("/data/...") path so that
+        # owner routing / MoD matching (which also key off the normalized path)
+        # stay correct. `root` deliberately stays at the data root.
+        #   scope_subpath="/data/onedrive"  -> only files under that prefix
+        #   exclude_subpaths=["/data/custom/"] -> everything except those prefixes
+        self._scope_subpath = scope_subpath.rstrip("/") if scope_subpath else None
+        self._exclude_subpaths = [p for p in (exclude_subpaths or [])]
         if mod_yaml is None:
             mod_yaml = get_settings().master_of_data_config
         self._direct_patterns: list[tuple[str, str]] = []
@@ -41,6 +55,14 @@ class LocalFolderConnector(Connector):
             if not self._include_uploads:
                 if any(part in self._EXCLUDED_DIRS for part in p.parts):
                     continue
+            # Apply optional source scoping on the normalized path.
+            norm = self._normalize(p)
+            if self._scope_subpath is not None and not (
+                norm == self._scope_subpath or norm.startswith(self._scope_subpath + "/")
+            ):
+                continue
+            if self._exclude_subpaths and any(norm.startswith(ex) for ex in self._exclude_subpaths):
+                continue
             stat = p.stat()
             mt, _ = mimetypes.guess_type(p.name)
             out.append(

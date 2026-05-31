@@ -87,6 +87,7 @@ export const users: User[] = [
 ];
 
 export const source_options: SourceOption[] = [
+  { id: "source_sample", label: "GDPR sample data — GitHub (15 files)", path: "sample" },
   { id: "source_all", label: "All sources (27 files)", path: "./data" },
   { id: "source_onedrive", label: "OneDrive only (10 files)", path: "./data/onedrive" },
   { id: "source_sharepoint_hr", label: "Shared HR (5 files)", path: "./data/shared/HR" },

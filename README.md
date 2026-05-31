@@ -91,10 +91,10 @@ Runs two full scans over 27 PDFs, computes P/R/F1 against `eval/ground_truth.csv
 
 | Metric | Value |
 |--------|-------|
-| Precision | 95.2% |
-| Recall | 97.1% |
-| F1 | **0.961** |
-| Document type accuracy | **91.7%** |
+| Precision | 94.1% |
+| Recall | 96.4% |
+| F1 | **0.952** |
+| Document type accuracy | **89.5%** |
 | Reproducibility | **PASS** (identical `result_hash` across runs) |
 | Scan cold (parallel) | ~39s / 27 files |
 | Scan cached | ~1.5s / 27 files |

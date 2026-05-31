@@ -191,9 +191,28 @@ def _placeholder_pdf_bytes(filename: str) -> bytes:
     return bytes(pdf)
 
 
+# Some local filenames differ from the upstream repo names. The repo stores the
+# "base" document of each type without a "_Template" suffix, so we download under
+# the real upstream name but keep the local "_Template.pdf" name (so ground_truth
+# and MoD routing are unchanged). Without this mapping these 5 fall back to
+# synthetic placeholder PDFs.
+_UPSTREAM_NAME_OVERRIDE = {
+    "Expense_Report_Template.pdf": "Expense_Report.pdf",
+    "Incident_Report_Template.pdf": "Incident_Report.pdf",
+    "IT_Access_Request_Template.pdf": "IT_Access_Request.pdf",
+    "Supplier_Onboarding_Template.pdf": "Supplier_Onboarding.pdf",
+    "Training_Evaluation_Template.pdf": "Training_Evaluation.pdf",
+}
+
+
 def _try_download(filename: str, dest: Path) -> bool:
-    """Attempt to fetch a sample PDF from upstream. Returns True on success."""
-    url = f"{GH_RAW_BASE}/{filename}"
+    """Attempt to fetch a sample PDF from upstream. Returns True on success.
+
+    Uses the real upstream filename (via _UPSTREAM_NAME_OVERRIDE) when the local
+    name differs, but always writes to `dest` (the local name).
+    """
+    remote_name = _UPSTREAM_NAME_OVERRIDE.get(filename, filename)
+    url = f"{GH_RAW_BASE}/{remote_name}"
     try:
         with urllib.request.urlopen(url, timeout=4) as resp:
             data = resp.read()
@@ -201,7 +220,7 @@ def _try_download(filename: str, dest: Path) -> bool:
                 dest.write_bytes(data)
                 return True
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        logger.debug("Could not download %s: %s", filename, exc)
+        logger.debug("Could not download %s (as %s): %s", filename, remote_name, exc)
     return False
 
 

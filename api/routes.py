@@ -142,9 +142,44 @@ def list_users(db: Session = Depends(get_db)) -> list[UserOut]:
 # ---------------------------------------------------------------------------
 
 
-def _connector_for(_source_path: str) -> LocalFolderConnector:
-    """Single source for now; `source_path` is captured for future routing."""
-    return LocalFolderConnector(root=get_settings().data_root_path)
+def _connector_for(source_path: str) -> LocalFolderConnector:
+    """Build a connector scoped to the requested source.
+
+    `source_path` comes from the run-scan UI. It selects which slice of the data
+    root to walk. Scoping is applied as a filter on the normalized "/data/..."
+    path (the connector keeps root=data_root so owner/MoD routing stays correct).
+
+    Accepted values:
+      - "sample" / "samples"      -> the GitHub sample set (everything except custom/)
+      - "/data" or "./data" or "" -> all sources (27 files)
+      - "./data/onedrive", "/data/shared/HR", "./data/custom", ...
+                                   -> only that sub-tree
+    """
+    root = get_settings().data_root_path
+    raw = (source_path or "").strip()
+
+    # Special marker: the curated GitHub sample data = all sources minus custom/.
+    if raw.lower() in {"sample", "samples", "source_sample", "/data/sample", "./data/sample"}:
+        return LocalFolderConnector(root=root, exclude_subpaths=["/data/custom/"])
+
+    # Normalize "./data/x" / "data/x" / "/data/x" -> "/data/x".
+    norm = raw.replace("\\", "/").lstrip(".")
+    if norm.startswith("/data"):
+        scope = norm.rstrip("/")
+    elif norm.startswith("data/") or norm == "data":
+        scope = "/" + norm.rstrip("/")
+    else:
+        scope = None  # unrecognized -> full root
+
+    # The whole root (or unrecognized) means no scoping.
+    if scope in (None, "/data", "/data/"):
+        return LocalFolderConnector(root=root)
+
+    # Guard against path traversal — scope must stay under /data.
+    if ".." in scope:
+        return LocalFolderConnector(root=root)
+
+    return LocalFolderConnector(root=root, scope_subpath=scope)
 
 
 @router.post("/scan/run", response_model=ScanRunResponse, tags=["Scans"])
