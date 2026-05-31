@@ -612,11 +612,17 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     files_with_findings = last_scan.files_with_findings if last_scan else 0
     total_findings = last_scan.total_findings if last_scan else 0
 
-    # Findings breakdown.
+    # Findings breakdown — scoped to the LAST scan so the charts match the KPI
+    # cards above (total_findings / files_with_findings). Aggregating DB-wide
+    # would make the charts sum to a different number than the headline count.
+    doc_q = select(Finding.document_type, func.count()).group_by(Finding.document_type)
+    sens_q = select(Finding.sensitivity_level, func.count()).group_by(Finding.sensitivity_level)
+    if last_scan:
+        doc_q = doc_q.where(Finding.scan_id == last_scan.id)
+        sens_q = sens_q.where(Finding.scan_id == last_scan.id)
+
     by_doc: dict[str, int] = {}
-    for doc_type, count in db.execute(
-        select(Finding.document_type, func.count()).group_by(Finding.document_type)
-    ).all():
+    for doc_type, count in db.execute(doc_q).all():
         by_doc[doc_type] = count
 
     # Ensure every enum value is present so the frontend chart never breaks.
@@ -626,9 +632,7 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         by_doc.setdefault(dt, 0)
 
     by_sens: dict[str, int] = {}
-    for level, count in db.execute(
-        select(Finding.sensitivity_level, func.count()).group_by(Finding.sensitivity_level)
-    ).all():
+    for level, count in db.execute(sens_q).all():
         by_sens[level] = count
     for sl in SENSITIVITY_LEVELS:
         by_sens.setdefault(sl, 0)
