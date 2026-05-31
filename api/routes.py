@@ -408,6 +408,30 @@ def findings_export(
     )
 
 
+@router.get("/findings/all", response_model=list[FindingOut], tags=["Findings"])
+def findings_all(
+    status: Optional[str] = Query(default=None),
+    owner_user_id: Optional[str] = Query(default=None),
+    sensitivity: Optional[str] = Query(default=None),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_db),
+) -> list[FindingOut]:
+    """All findings across all owners — admin view."""
+    q = select(Finding)
+    if status:
+        q = q.where(Finding.review_status == status)
+    if owner_user_id:
+        q = q.where(
+            (Finding.owner_user_id == owner_user_id) |
+            (Finding.master_of_data_id == owner_user_id)
+        )
+    if sensitivity:
+        q = q.where(Finding.sensitivity_level == sensitivity)
+    q = q.order_by(Finding.scan_timestamp.desc()).limit(limit)
+    rows = db.execute(q).scalars().all()
+    return [_build_finding_out(db, f) for f in rows]
+
+
 @router.get("/findings/{finding_id}", response_model=FindingOut, tags=["Findings"])
 def get_finding(finding_id: str = Path(...), db: Session = Depends(get_db)) -> FindingOut:
     f = db.execute(select(Finding).where(Finding.id == finding_id)).scalar_one_or_none()
@@ -472,30 +496,6 @@ def finding_action(
     db.commit()
     db.refresh(f)
     return _build_finding_out(db, f)
-
-
-@router.get("/findings/all", response_model=list[FindingOut], tags=["Findings"])
-def findings_all(
-    status: Optional[str] = Query(default=None),
-    owner_user_id: Optional[str] = Query(default=None),
-    sensitivity: Optional[str] = Query(default=None),
-    limit: int = Query(default=200, ge=1, le=500),
-    db: Session = Depends(get_db),
-) -> list[FindingOut]:
-    """All findings across all owners — admin view."""
-    q = select(Finding)
-    if status:
-        q = q.where(Finding.review_status == status)
-    if owner_user_id:
-        q = q.where(
-            (Finding.owner_user_id == owner_user_id) |
-            (Finding.master_of_data_id == owner_user_id)
-        )
-    if sensitivity:
-        q = q.where(Finding.sensitivity_level == sensitivity)
-    q = q.order_by(Finding.scan_timestamp.desc()).limit(limit)
-    rows = db.execute(q).scalars().all()
-    return [_build_finding_out(db, f) for f in rows]
 
 
 @router.post("/findings/{finding_id}/reassign", response_model=FindingOut, tags=["Findings"])
