@@ -365,9 +365,12 @@ export function AdminDashboardPage() {
               >
                 {stats.pending_reviews_total ?? 0}
               </button>
-              <p className={`text-xs ${(stats.pending_reviews_total ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-text_medium"}`}>
+              <button
+                onClick={() => router.push("/all-findings?status=pending")}
+                className={`text-xs transition-opacity hover:opacity-70 ${(stats.pending_reviews_total ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-bosch_blue font-medium"}`}
+              >
                 {(stats.pending_reviews_total ?? 0) === 0 ? "✓ All reviewed" : "Click to view →"}
-              </p>
+              </button>
             </div>
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Overdue &gt;30 days</p>
