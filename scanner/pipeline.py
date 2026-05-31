@@ -56,6 +56,11 @@ _PERSON_NAME_FILLER = {
     "zahlungen", "rue", "str", "straße", "strasse", "address", "addr",
     "ärztliche", "arztliche", "krankmeldung", "bescheinigung",
     "abteilungsleitung", "personalwesen", "department", "mgr",
+    # Payroll codes and abbreviations that Presidio confuses for names
+    "lohnsteuer", "steuerbrutto", "normalstunden", "feiertagsstunden",
+    "rentenversicherung", "kreissparkasse", "überweisung", "nachverrechnung",
+    "zeitbezüge", "basisbezüge", "bruttoentgelte", "gesamtbrutto",
+    "lsg", "esg", "ez", "lfd", "lstl", "lste", "ranl", "rane", "sbrl", "sbre",
 }
 
 # Cert/standard patterns that Presidio tags as ORGANIZATION_NAME.

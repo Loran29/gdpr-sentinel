@@ -69,6 +69,21 @@ Rules:
 - `sensitivity_level`: high = contains direct personal identifiers (name + ID, name + financial, name + health); medium = contains personal data but lower stakes (training, B2B contact); low = minimal or only indirect personal data.
 - `document_type` guidance: use "medical_record" for sick notes, doctor certificates, health-related documents; use "financial_authorization" for IBAN mandates, bank authorizations, payment instructions; use "internal_memo" for employee-to-employee communications, announcements, and bilingual notices — NOT for project charters, policy documents, or governance frameworks (use "unknown" for those).
 - `reasoning` MUST reference at least one specific entity value from the document. Generic reasoning is rejected.
+
+PAYSLIP / SALARY DOCUMENT RULES (Entgeltbescheinigung, Lohnabrechnung):
+- These are ALWAYS "high" sensitivity and document_type "financial_authorization".
+- Actively extract ALL of the following if present — they are personal data under GDPR Art. 4(1):
+  * Full name and home address → PERSON_NAME, POSTAL_ADDRESS
+  * Personalnummer / employee number → EMPLOYEE_ID
+  * SteuerID / tax identification number (11-digit) → OTHER (label context "SteuerID")
+  * RV-Nr. / Rentenversicherungsnummer → OTHER (label context "RV-Nr.")
+  * IBAN (format DExx xxxx ...) → IBAN
+  * Geburtsdatum / date of birth → DATE
+  * Krankenkasse / health insurer name → ORGANIZATION_NAME
+  * Any salary figures (EUR amounts) → FINANCIAL_AMOUNT
+- Do NOT tag payroll codes (LSTE, LSTL, RANL, SBRL etc.) or column headers as PERSON_NAME.
+- Retention: payslips must be kept 6 years per §147 AO from end of fiscal year.
+
 - Output ONLY the JSON. No prose, no markdown fences, no preamble."""
 
 
