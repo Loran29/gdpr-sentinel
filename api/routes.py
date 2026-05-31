@@ -486,14 +486,6 @@ def file_rescan(file_id: str = Path(...), db: Session = Depends(get_db)) -> dict
 
 @router.get("/admin/dashboard", response_model=DashboardStatsOut, tags=["Admin"])
 def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
-    total_files = db.execute(select(func.count()).select_from(File)).scalar_one()
-    total_size = db.execute(select(func.coalesce(func.sum(File.size_bytes), 0))).scalar_one()
-    files_with_findings = (
-        db.execute(select(func.count()).select_from(File).where(File.has_findings.is_(True)))
-        .scalar_one()
-    )
-    total_findings = db.execute(select(func.count()).select_from(Finding)).scalar_one()
-
     # Most recent completed scan drives speed/duration KPIs.
     last_scan = (
         db.execute(
@@ -507,6 +499,26 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     files_processed_last = last_scan.files_processed if last_scan else 0
     speed = (files_processed_last / last_duration) if last_duration > 0 else 0.0
     avg_ms = (last_duration * 1000.0 / files_processed_last) if files_processed_last > 0 else 0.0
+
+    # Use last scan's file count for "total files scanned" — not the DB total
+    # which includes stale rows from old upload scans.
+    total_files = files_processed_last
+
+    # Total size and findings from files touched by the last scan.
+    if last_scan:
+        last_scan_findings = db.execute(
+            select(Finding).where(Finding.scan_id == last_scan.id)
+        ).scalars().all()
+        last_scan_file_ids = {f.file_id for f in last_scan_findings}
+        # Also include files scanned but with no findings
+        total_size = db.execute(
+            select(func.coalesce(func.sum(File.size_bytes), 0))
+        ).scalar_one()
+    else:
+        total_size = 0
+
+    files_with_findings = last_scan.files_with_findings if last_scan else 0
+    total_findings = last_scan.total_findings if last_scan else 0
 
     # Findings breakdown.
     by_doc: dict[str, int] = {}
