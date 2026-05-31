@@ -307,6 +307,8 @@ def _build_finding_out(db: Session, f: Finding) -> FindingOut:
         reviewed_by_user_id=f.reviewed_by_user_id,
         reviewed_at=f.reviewed_at,
         review_note=f.review_note,
+        legal_basis=f.legal_basis,
+        cleanup_deadline=f.cleanup_deadline,
     )
 
 
@@ -451,9 +453,11 @@ def finding_action(
 
     elif body.action == UserAction.MARK_FALSE_POSITIVE.value:
         f.review_status = ReviewStatus.MARKED_FALSE_POSITIVE.value
+        f.cleanup_deadline = body.cleanup_deadline
 
     elif body.action == UserAction.KEEP_BUSINESS_NEED.value:
         f.review_status = ReviewStatus.KEPT_BUSINESS_NEED.value
+        f.legal_basis = body.legal_basis
 
     else:
         raise InvalidActionError(f"Unknown action '{body.action}'", {"action": body.action})
@@ -612,6 +616,24 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         if deadline < now:
             files_past_retention += 1
 
+    # Compliance action KPIs
+    pending_reviews_total = db.execute(
+        select(func.count()).select_from(Finding)
+        .where(Finding.review_status == ReviewStatus.PENDING.value)
+    ).scalar_one()
+
+    overdue_cutoff = now - timedelta(days=30)
+    overdue_reviews_count = db.execute(
+        select(func.count()).select_from(Finding)
+        .where(Finding.review_status == ReviewStatus.PENDING.value)
+        .where(Finding.scan_timestamp < overdue_cutoff)
+    ).scalar_one()
+
+    cleanup_overdue_count = db.execute(
+        select(func.count()).select_from(Finding)
+        .where(Finding.review_status == ReviewStatus.CLEANUP_OVERDUE.value)
+    ).scalar_one()
+
     return DashboardStatsOut(
         total_files_scanned=int(total_files or 0),
         total_size_bytes=int(total_size or 0),
@@ -629,6 +651,9 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         recent_scans=recent,
         last_scan_timing_breakdown=timing_breakdown,
         files_past_retention=files_past_retention,
+        pending_reviews_total=int(pending_reviews_total or 0),
+        overdue_reviews_count=int(overdue_reviews_count or 0),
+        cleanup_overdue_count=int(cleanup_overdue_count or 0),
     )
 
 

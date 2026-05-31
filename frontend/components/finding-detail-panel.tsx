@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Maximize2 } from "lucide-react";
 import { Finding } from "@/types/models";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,14 @@ import { EntityTable } from "@/components/entity-table";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/status-badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectItem } from "@/components/ui/select";
 import { format_document_type, format_timestamp } from "@/lib/utils";
+
+const LEGAL_BASIS_OPTIONS = [
+  { value: "Art. 6(1)(b)", label: "Contractual necessity — Art. 6(1)(b)" },
+  { value: "Art. 6(1)(c)", label: "Legal obligation — Art. 6(1)(c)" },
+  { value: "Art. 6(1)(f)", label: "Legitimate interest — Art. 6(1)(f)" },
+];
 
 export function FindingDetailPanel({
   finding,
@@ -20,16 +27,29 @@ export function FindingDetailPanel({
   on_apply_action: (
     finding_id: string,
     review_status: "keep_business_need" | "mark_false_positive" | "delete",
-    review_note: string
+    review_note: string,
+    options?: { legal_basis?: string; cleanup_deadline?: string }
   ) => void;
 }) {
-  const [review_note, set_review_note] = useState("");
+  const [legal_basis, set_legal_basis] = useState("");
+  const [keep_note, set_keep_note] = useState("");
+  const [cleanup_deadline, set_cleanup_deadline] = useState("");
+  const [cleanup_note, set_cleanup_note] = useState("");
+  const [delete_confirm, set_delete_confirm] = useState(false);
 
   useEffect(() => {
-    set_review_note(finding?.review_note ?? "");
-  }, [finding?.id, finding?.review_note]);
+    set_legal_basis("");
+    set_keep_note("");
+    set_cleanup_deadline("");
+    set_cleanup_note("");
+    set_delete_confirm(false);
+  }, [finding?.id]);
 
-  const note_is_valid = useMemo(() => review_note.trim().length > 0, [review_note]);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const min_date = tomorrow.toISOString().split("T")[0];
+
+  const note_is_valid = true; // notes are optional in new flow
 
   if (!finding) {
     return (
@@ -121,43 +141,86 @@ export function FindingDetailPanel({
       <Separator />
 
       {finding.review_status === "pending" && (
-        <div className="space-y-2 rounded-lg border border-border_grey p-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-text_medium">Review note</p>
-          <Textarea
-            placeholder="Add context before applying review action"
-            value={review_note}
-            onChange={(event) => set_review_note(event.target.value)}
-          />
-          <div className="flex flex-wrap gap-2">
+        <div className="space-y-3">
+
+          {/* Keep: business need */}
+          <div className="rounded-lg border border-border_grey p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">Keep: business need</p>
+            <Select value={legal_basis} onChange={e => set_legal_basis(e.target.value)}>
+              <SelectItem value="">Select legal basis (required)...</SelectItem>
+              {LEGAL_BASIS_OPTIONS.map(o => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
+            </Select>
+            <Textarea placeholder="Optional note" value={keep_note} onChange={e => set_keep_note(e.target.value)} />
             <Button
               variant="secondary"
-              disabled={!note_is_valid}
-              onClick={() => on_apply_action(finding.id, "keep_business_need", review_note.trim())}
+              disabled={!legal_basis}
+              className="w-full"
+              onClick={() => on_apply_action(finding.id, "keep_business_need", keep_note.trim(), { legal_basis })}
             >
-              Keep: business need
+              Confirm retention basis
             </Button>
+          </div>
+
+          {/* Acknowledge cleanup */}
+          <div className="rounded-lg border border-border_grey p-3 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">Acknowledge cleanup</p>
+            <div className="space-y-1">
+              <label className="text-xs text-text_medium">I will delete / anonymise this file by:</label>
+              <input
+                type="date"
+                min={min_date}
+                value={cleanup_deadline}
+                onChange={e => set_cleanup_deadline(e.target.value)}
+                className="w-full rounded-md border border-border_grey bg-white px-2.5 py-1.5 text-sm text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
+              />
+            </div>
+            <Textarea placeholder="Optional note" value={cleanup_note} onChange={e => set_cleanup_note(e.target.value)} />
             <Button
               variant="outline"
-              disabled={!note_is_valid}
-              onClick={() => on_apply_action(finding.id, "mark_false_positive", review_note.trim())}
+              disabled={!cleanup_deadline}
+              className="w-full"
+              onClick={() => on_apply_action(finding.id, "mark_false_positive", cleanup_note.trim(), { cleanup_deadline })}
             >
-              Acknowledge cleanup
+              Acknowledge cleanup by {cleanup_deadline || "…"}
             </Button>
-            <Button
-              variant="destructive"
-              disabled={!note_is_valid}
-              onClick={() => on_apply_action(finding.id, "delete", review_note.trim())}
-            >
-              Delete file
-            </Button>
+          </div>
+
+          {/* Delete file */}
+          <div className="rounded-lg border border-red-200 bg-red-50/50 p-3 space-y-2 dark:border-red-500/20 dark:bg-red-500/5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-bosch_red">Delete file permanently</p>
+            <p className="text-xs text-text_medium">This removes the file from disk. This action cannot be undone.</p>
+            {!delete_confirm ? (
+              <Button variant="destructive" className="w-full" onClick={() => set_delete_confirm(true)}>
+                Delete file
+              </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="destructive" className="flex-1" onClick={() => {
+                  set_delete_confirm(false);
+                  on_apply_action(finding.id, "delete", "", {});
+                }}>
+                  Yes, delete permanently
+                </Button>
+                <Button variant="outline" onClick={() => set_delete_confirm(false)}>Cancel</Button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {finding.review_status !== "pending" && finding.review_note && (
-        <div className="rounded-lg border border-border_grey p-3">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">Review note</p>
-          <p className="text-sm text-text_dark">{finding.review_note}</p>
+      {finding.review_status !== "pending" && (
+        <div className="rounded-lg border border-border_grey p-3 space-y-1">
+          {finding.legal_basis && (
+            <p className="text-xs text-text_medium">Legal basis: <span className="font-medium text-text_dark">{finding.legal_basis}</span></p>
+          )}
+          {finding.cleanup_deadline && (
+            <p className="text-xs text-text_medium">Cleanup deadline: <span className="font-medium text-text_dark">{finding.cleanup_deadline.split("T")[0]}</span></p>
+          )}
+          {finding.review_note && (
+            <p className="text-xs text-text_medium">Note: <span className="text-text_dark">{finding.review_note}</span></p>
+          )}
         </div>
       )}
     </div>

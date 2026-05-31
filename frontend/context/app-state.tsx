@@ -37,6 +37,8 @@ type ApplyActionPayload = {
   review_status: "keep_business_need" | "mark_false_positive" | "delete";
   review_note: string;
   confirm?: boolean;
+  legal_basis?: string;
+  cleanup_deadline?: string;
 };
 
 type AppStateContextValue = {
@@ -194,7 +196,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   );
 
   const apply_finding_action = useCallback(
-    async ({ finding_id, review_status, review_note, confirm }: ApplyActionPayload) => {
+    async ({ finding_id, review_status, review_note, confirm, legal_basis, cleanup_deadline }: ApplyActionPayload) => {
       if (!selected_user) {
         return;
       }
@@ -208,7 +210,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         review_status,
         review_note,
         selected_user.id,
-        confirm === true
+        confirm === true,
+        legal_basis,
+        cleanup_deadline,
       );
 
       if (result.ok) {

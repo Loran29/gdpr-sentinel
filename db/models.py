@@ -113,6 +113,8 @@ class Finding(Base):
     reviewed_by_user_id: Mapped[Optional[str]] = mapped_column(ForeignKey("users.id"), nullable=True)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     review_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    legal_basis: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    cleanup_deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     document_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     entities: Mapped[list["Entity"]] = relationship(

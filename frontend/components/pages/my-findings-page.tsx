@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { FindingDetailPanel } from "@/components/finding-detail-panel";
 import { StatusBadge } from "@/components/status-badge";
@@ -18,6 +18,7 @@ function row_status_class(status: Finding["review_status"], active: boolean): st
   if (active) return "border-l-4 border-l-bosch_red bg-bosch_red/5 dark:bg-bosch_red/10";
   if (status === "kept_business_need") return "border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-500/5";
   if (status === "marked_false_positive") return "border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-500/5";
+  if (status === "cleanup_overdue") return "border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-500/5";
   if (status === "deleted") return "border-l-4 border-l-red-400 bg-red-50/60 opacity-60 dark:bg-red-500/5";
   return "border-l-4 border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/60";
 }
@@ -28,6 +29,7 @@ export function MyFindingsPage() {
 
   const [selected_finding_id, set_selected_finding_id] = useState<string | null>(null);
   const [selected_finding_detail, set_selected_finding_detail] = useState<null | Finding>(null);
+  const [search, set_search] = useState("");
   const [drawer_open, set_drawer_open] = useState(false);
   const [expanded_row_id, set_expanded_row_id] = useState<string | null>(null);
   const drawer_ref = useRef<HTMLDivElement>(null);
@@ -113,6 +115,29 @@ export function MyFindingsPage() {
     f.review_status === "acknowledged_cleanup" || f.review_status === "marked_false_positive"
   ).length;
 
+  const SENSITIVITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
+
+  const filtered_findings = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const base = q
+      ? my_findings.filter((f) =>
+          f.file_name.toLowerCase().includes(q) ||
+          f.document_type.toLowerCase().includes(q)
+        )
+      : my_findings;
+    // Sort: cleanup_overdue first, then pending, then reviewed
+    // Within pending: high → medium → low sensitivity, then newest first
+    return [...base].sort((a, b) => {
+      const a_overdue = a.review_status === "cleanup_overdue" ? 0 : a.review_status === "pending" ? 1 : 2;
+      const b_overdue = b.review_status === "cleanup_overdue" ? 0 : b.review_status === "pending" ? 1 : 2;
+      if (a_overdue !== b_overdue) return a_overdue - b_overdue;
+      const a_sens = SENSITIVITY_ORDER[a.sensitivity_level] ?? 3;
+      const b_sens = SENSITIVITY_ORDER[b.sensitivity_level] ?? 3;
+      if (a_sens !== b_sens) return a_sens - b_sens;
+      return new Date(b.scan_timestamp).getTime() - new Date(a.scan_timestamp).getTime();
+    });
+  }, [my_findings, search]);
+
   const handle_row_click = (finding_id: string) => {
     set_selected_finding_id(finding_id);
     set_selected_finding_detail(null);
@@ -164,6 +189,27 @@ export function MyFindingsPage() {
       ) : (
         <Card className="min-w-0">
           <CardContent className="min-w-0 p-0">
+            {/* Search bar */}
+            <div className="border-b border-border_grey/80 px-3 py-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text_medium" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => set_search(e.target.value)}
+                  placeholder="Search by file name or document type…"
+                  className="w-full rounded-md border border-border_grey bg-page_bg py-1.5 pl-8 pr-8 text-sm text-text_dark placeholder:text-text_medium focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
+                />
+                {search && (
+                  <button
+                    onClick={() => set_search("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text_medium hover:text-text_dark"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader className="sticky top-0 z-10">
@@ -172,14 +218,20 @@ export function MyFindingsPage() {
                     <TableHead>File name</TableHead>
                     <TableHead>Document type</TableHead>
                     <TableHead>Sensitivity</TableHead>
-                    <TableHead className="text-right">Entities</TableHead>
-                    <TableHead>Scanned</TableHead>
+                    <TableHead className="text-center">Entities</TableHead>
+                    <TableHead className="text-center">Scanned</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-24 text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {my_findings.map((finding) => {
+                  {filtered_findings.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-sm text-text_medium">
+                        No files match &ldquo;{search}&rdquo;.
+                      </td>
+                    </tr>
+                  ) : filtered_findings.map((finding) => {
                     const active = finding.id === selected_finding_id && drawer_open;
                     const expanded = finding.id === expanded_row_id;
                     const is_reviewed = finding.review_status !== "pending";
@@ -207,8 +259,8 @@ export function MyFindingsPage() {
                           </TableCell>
                           <TableCell>{format_document_type(finding.document_type)}</TableCell>
                           <TableCell><StatusBadge value={finding.sensitivity_level} /></TableCell>
-                          <TableCell className="text-right tabular-nums">{finding.entities.length}</TableCell>
-                          <TableCell className="text-xs text-text_medium" title={format_timestamp(finding.scan_timestamp)}>
+                          <TableCell className="text-center tabular-nums">{finding.entities.length}</TableCell>
+                          <TableCell className="text-center text-xs text-text_medium" title={format_timestamp(finding.scan_timestamp)}>
                             {format_timestamp_short(finding.scan_timestamp)}
                           </TableCell>
                           <TableCell><StatusBadge value={finding.review_status} /></TableCell>
@@ -310,8 +362,14 @@ export function MyFindingsPage() {
           <FindingDetailPanel
             finding={selected_finding}
             preview_url={selected_finding ? `${API_BASE_URL}/files/${selected_finding.file_id}/preview` : undefined}
-            on_apply_action={async (finding_id, review_status, review_note) => {
-              await apply_finding_action({ finding_id, review_status, review_note });
+            on_apply_action={async (finding_id, review_status, review_note, options) => {
+              await apply_finding_action({
+                finding_id,
+                review_status,
+                review_note,
+                legal_basis: options?.legal_basis,
+                cleanup_deadline: options?.cleanup_deadline,
+              });
               set_drawer_open(false);
             }}
           />

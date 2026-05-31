@@ -61,6 +61,8 @@ class FindingOut(_Base):
     reviewed_by_user_id: Optional[str] = None
     reviewed_at: Optional[datetime] = None
     review_note: Optional[str] = None
+    legal_basis: Optional[str] = None
+    cleanup_deadline: Optional[datetime] = None
 
 
 class UserOut(_Base):
@@ -230,6 +232,9 @@ class DashboardStatsOut(_Base):
     recent_scans: list[RecentScanOut]
     last_scan_timing_breakdown: StageTiming = StageTiming()
     files_past_retention: int = 0
+    pending_reviews_total: int = 0
+    overdue_reviews_count: int = 0
+    cleanup_overdue_count: int = 0
 
 
 class OwnerSummaryOut(_Base):
@@ -265,6 +270,8 @@ class ScanDeltaResponse(BaseModel):
 class FindingActionRequest(BaseModel):
     action: Literal["delete", "mark_false_positive", "keep_business_need"]
     note: Optional[str] = None
+    legal_basis: Optional[str] = None
+    cleanup_deadline: Optional[datetime] = None
 
 
 class BatchActionRequest(BaseModel):

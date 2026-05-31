@@ -64,10 +64,13 @@ export type Finding = {
     | "marked_false_positive"
     | "deleted"
     | "confirmed_business_need"
-    | "acknowledged_cleanup";
+    | "acknowledged_cleanup"
+    | "cleanup_overdue";
   reviewed_by_user_id: string | null;
   reviewed_at: string | null;
   review_note: string | null;
+  legal_basis: string | null;
+  cleanup_deadline: string | null;
 };
 
 export type Scan = {
@@ -115,6 +118,9 @@ export type DashboardStats = {
     db_ms?: number;
   } | null;
   files_past_retention?: number;
+  pending_reviews_total?: number;
+  overdue_reviews_count?: number;
+  cleanup_overdue_count?: number;
 };
 
 export type OwnerSummary = {

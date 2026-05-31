@@ -271,7 +271,8 @@ export function map_backend_status_to_display(status: string): DisplayReviewStat
     status === "acknowledged_cleanup" ||
     status === "kept_business_need" ||
     status === "marked_false_positive" ||
-    status === "deleted"
+    status === "deleted" ||
+    status === "cleanup_overdue"
   ) {
     return status;
   }
@@ -421,7 +422,9 @@ export async function submit_finding_action(
   action: string,
   note: string,
   user_id: string,
-  confirm?: boolean
+  confirm?: boolean,
+  legal_basis?: string,
+  cleanup_deadline?: string,
 ): Promise<ApiMutationResult<Finding>> {
   const mapped_action = map_ui_action_to_backend_action(action as UiAction, {
     explicit_delete: confirm === true && action === "acknowledged_cleanup"
@@ -452,7 +455,9 @@ export async function submit_finding_action(
         review_status: mapped_status,
         reviewed_at: now_utc_iso(),
         reviewed_by_user_id: user_id,
-        review_note: note
+        review_note: note,
+        legal_basis: legal_basis ?? null,
+        cleanup_deadline: cleanup_deadline ?? null,
       }
     };
   }
@@ -464,7 +469,9 @@ export async function submit_finding_action(
     user_id,
     body: {
       action: mapped_action,
-      note
+      note,
+      legal_basis: legal_basis ?? null,
+      cleanup_deadline: cleanup_deadline ?? null,
     }
   });
 

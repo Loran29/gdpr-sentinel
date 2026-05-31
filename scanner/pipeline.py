@@ -22,7 +22,7 @@ from sqlalchemy import select
 from connectors.base import Connector, FileMeta
 from connectors.local_folder import LocalFolderConnector
 from core.config import get_settings
-from core.enums import OwnerType, ScanStatus, ScanType
+from core.enums import OwnerType, ReviewStatus, ScanStatus, ScanType
 from core.hashing import canonical_findings_hash, file_sha256
 from db.models import Entity, File, Finding, MasterOfDataSource, Scan
 from db.session import session_scope
@@ -541,6 +541,21 @@ def _run_scan(
         scan.total_findings = len(findings_for_hash)
         scan.result_hash = result_hash
         scan.stage_timings_ms = _json.dumps({k: round(v) for k, v in agg_timings.items()})
+
+    # Cleanup overdue escalation: findings where the employee acknowledged cleanup
+    # (marked_false_positive) with a deadline that has now passed — and the file
+    # is STILL present (we just saw it in this scan). Escalate to cleanup_overdue.
+    now_naive = completed.replace(tzinfo=None)
+    with session_scope() as s:
+        overdue_findings = s.execute(
+            select(Finding)
+            .where(Finding.review_status == ReviewStatus.MARKED_FALSE_POSITIVE.value)
+            .where(Finding.cleanup_deadline.isnot(None))
+            .where(Finding.cleanup_deadline < now_naive)
+        ).scalars().all()
+        for f in overdue_findings:
+            f.review_status = ReviewStatus.CLEANUP_OVERDUE.value
+            logger.info("Escalated finding %s to cleanup_overdue (deadline %s passed)", f.id, f.cleanup_deadline)
 
     return scan_id
 

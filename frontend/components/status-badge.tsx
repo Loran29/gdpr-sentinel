@@ -8,6 +8,7 @@ type StatusKind =
   | "kept_business_need"
   | "marked_false_positive"
   | "deleted"
+  | "cleanup_overdue"
   | "high"
   | "medium"
   | "low"
@@ -26,6 +27,8 @@ export function StatusBadge({ value, size = "default" }: { value: StatusKind; si
     class_name = "border-blue-600 bg-blue-100 text-blue-800 dark:border-blue-400/50 dark:bg-blue-500/20 dark:text-blue-300";
   } else if (value === "acknowledged_cleanup" || value === "marked_false_positive") {
     class_name = "border-emerald-600 bg-emerald-100 text-emerald-800 dark:border-emerald-400/50 dark:bg-emerald-500/20 dark:text-emerald-300";
+  } else if (value === "cleanup_overdue") {
+    class_name = "border-orange-500 bg-orange-100 text-orange-800 dark:border-orange-400/50 dark:bg-orange-500/20 dark:text-orange-300";
   } else if (value === "deleted") {
     class_name = "border-red-600 bg-red-100 text-red-800 dark:border-red-400/50 dark:bg-red-500/20 dark:text-red-300";
   } else if (value === "high") {

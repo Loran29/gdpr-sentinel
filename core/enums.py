@@ -30,6 +30,7 @@ class ReviewStatus(str, Enum):
     DELETED = "deleted"
     MARKED_FALSE_POSITIVE = "marked_false_positive"
     KEPT_BUSINESS_NEED = "kept_business_need"
+    CLEANUP_OVERDUE = "cleanup_overdue"
 
 
 class UserAction(str, Enum):

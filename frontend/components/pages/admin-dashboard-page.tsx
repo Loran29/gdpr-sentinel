@@ -12,6 +12,7 @@ import {
   HardDrive,
   Link2,
   MemoryStick,
+  RefreshCw,
   Server,
   Zap
 } from "lucide-react";
@@ -25,8 +26,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { dashboard_stats, reproducibility_snapshot, resource_intensity } from "@/lib/mock-data";
 import { format_bytes, format_number, format_timestamp } from "@/lib/utils";
-import { get_admin_dashboard, get_resource_health, get_scan, run_full_scan, run_delta_scan } from "@/src/lib/api-client";
+import { get_admin_dashboard, get_resource_health, get_scan, get_scheduler_config, run_full_scan, run_delta_scan, set_scheduler_config } from "@/src/lib/api-client";
 import { DashboardStats } from "@/types/models";
+import { SchedulerConfig } from "@/src/lib/api-types";
 import { use_app_state } from "@/context/app-state";
 
 export function AdminDashboardPage() {
@@ -40,14 +42,27 @@ export function AdminDashboardPage() {
   const [scan_elapsed, set_scan_elapsed] = useState(0);
   const poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [scheduler, set_scheduler] = useState<SchedulerConfig>({ interval_minutes: 0, running: false, next_run_at: null });
+  const [sched_value, set_sched_value] = useState("1");
+  const [sched_unit, set_sched_unit] = useState<"days" | "weeks" | "months">("days");
+  const [sched_saving, set_sched_saving] = useState(false);
+
   const load_stats = useCallback(async () => {
-    const [resolved_stats, health] = await Promise.all([
+    const [resolved_stats, health, sched] = await Promise.all([
       get_admin_dashboard(),
       get_resource_health(),
+      get_scheduler_config(),
     ]);
     set_stats(resolved_stats);
     set_ram_mb(health.memory_peak_mb);
     set_cpu_pct(health.cpu_load_pct);
+    set_scheduler(sched);
+    if (sched.interval_minutes > 0) {
+      const mins = sched.interval_minutes;
+      if (mins % (30 * 24 * 60) === 0) { set_sched_value(String(mins / (30 * 24 * 60))); set_sched_unit("months"); }
+      else if (mins % (7 * 24 * 60) === 0) { set_sched_value(String(mins / (7 * 24 * 60))); set_sched_unit("weeks"); }
+      else { set_sched_value(String(Math.round(mins / (24 * 60)))); set_sched_unit("days"); }
+    }
   }, []);
 
   useEffect(() => {
@@ -96,6 +111,22 @@ export function AdminDashboardPage() {
   }, [append_scan, load_stats, stop_poll]);
 
   useEffect(() => () => stop_poll(), [stop_poll]);
+
+  const unit_to_minutes = (val: number, unit: "days" | "weeks" | "months") => {
+    if (unit === "weeks") return val * 7 * 24 * 60;
+    if (unit === "months") return val * 30 * 24 * 60;
+    return val * 24 * 60;
+  };
+
+  const save_scheduler = useCallback(async () => {
+    const n = parseInt(sched_value, 10);
+    if (isNaN(n) || n < 0) return;
+    set_sched_saving(true);
+    const minutes = n === 0 ? 0 : unit_to_minutes(n, sched_unit);
+    const result = await set_scheduler_config(minutes);
+    if (result.ok) set_scheduler(result.data);
+    set_sched_saving(false);
+  }, [sched_value, sched_unit]);
 
   const document_type_data = useMemo(
     () => [
@@ -183,6 +214,36 @@ export function AdminDashboardPage() {
         <KpiCard icon={Activity} label="Recall" value={`${stats.recall_pct}%`} subtitle="% of real PII caught" />
       </div>
 
+      {/* Action required — compliance alerts */}
+      {((stats.pending_reviews_total ?? 0) > 0 || (stats.overdue_reviews_count ?? 0) > 0 || (stats.cleanup_overdue_count ?? 0) > 0) && (
+        <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5">
+          <CardHeader className="pb-2 pt-3">
+            <CardTitle className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4" />
+              Action required
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 pb-3 md:grid-cols-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Pending reviews</p>
+              <p className="mt-0.5 text-2xl font-semibold text-amber-800 dark:text-amber-300">{stats.pending_reviews_total ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Overdue reviews (&gt;30 days)</p>
+              <p className={`mt-0.5 text-2xl font-semibold ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-amber-800 dark:text-amber-300"}`}>
+                {stats.overdue_reviews_count ?? 0}
+              </p>
+            </div>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Cleanup overdue</p>
+              <p className={`mt-0.5 text-2xl font-semibold ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-amber-800 dark:text-amber-300"}`}>
+                {stats.cleanup_overdue_count ?? 0}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Row 3 — resource intensity + retention */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
@@ -207,8 +268,8 @@ export function AdminDashboardPage() {
           <div className="mt-auto space-y-1">
             {[
               { name: "Local folder", active: true },
-              { name: "OneDrive (stub)", active: false },
-              { name: "SharePoint (stub)", active: false },
+              { name: "OneDrive", active: false },
+              { name: "SharePoint", active: false },
             ].map(({ name, active }) => (
               <div key={name} className="flex items-center gap-1.5">
                 <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-success_green" : "bg-slate-300 dark:bg-slate-600"}`} />
@@ -230,6 +291,61 @@ export function AdminDashboardPage() {
           <CardContent><SensitivityChart data={sensitivity_data} /></CardContent>
         </Card>
       </div>
+
+      {/* Auto delta scan scheduler */}
+      <Card className="p-3.5">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
+              <RefreshCw className="h-4 w-4 text-bosch_blue" />
+            </span>
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-text_medium">Auto delta scan</p>
+              <p className="text-xs text-text_medium">
+                {scheduler.running ? "Periodic scanning active" : "Disabled — manual trigger only"}
+              </p>
+            </div>
+          </div>
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${scheduler.running ? "bg-success_green/15 text-success_green" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>
+            {scheduler.running ? "ACTIVE" : "OFF"}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-text_medium">Every</span>
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={sched_value}
+            onChange={(e) => set_sched_value(e.target.value)}
+            className="w-16 rounded-md border border-border_grey bg-white px-2.5 py-1.5 text-sm text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
+          />
+          <select
+            value={sched_unit}
+            onChange={(e) => set_sched_unit(e.target.value as "days" | "weeks" | "months")}
+            className="rounded-md border border-border_grey bg-white px-2.5 py-1.5 text-sm text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
+          >
+            <option value="days">Days</option>
+            <option value="weeks">Weeks</option>
+            <option value="months">Months</option>
+          </select>
+          <button
+            onClick={save_scheduler}
+            disabled={sched_saving}
+            className="inline-flex items-center gap-1.5 rounded-md bg-bosch_blue px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-bosch_blue/85 disabled:opacity-50"
+          >
+            {sched_saving ? "Saving…" : "Apply"}
+          </button>
+          {scheduler.running && (
+            <button
+              onClick={() => { set_sched_value("0"); set_scheduler_config(0).then(r => { if (r.ok) set_scheduler(r.data); }); }}
+              className="text-xs text-text_medium underline hover:text-text_dark"
+            >
+              Disable
+            </button>
+          )}
+        </div>
+      </Card>
 
       <div className="grid gap-3 xl:grid-cols-[1.6fr_1fr]">
         <RecentScansCard recent_scans={stats.recent_scans ?? []} />

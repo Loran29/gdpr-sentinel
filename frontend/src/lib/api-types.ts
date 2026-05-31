@@ -47,7 +47,8 @@ export type DisplayReviewStatus =
   | "acknowledged_cleanup"
   | "kept_business_need"
   | "marked_false_positive"
-  | "deleted";
+  | "deleted"
+  | "cleanup_overdue";
 
 export type ScanRunResponse = {
   scan_id: string;

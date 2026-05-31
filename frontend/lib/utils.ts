@@ -26,6 +26,10 @@ export function format_review_status(value: string): string {
     return "False positive";
   }
 
+  if (value === "cleanup_overdue") {
+    return "Cleanup overdue";
+  }
+
   if (value === "deleted") {
     return "Deleted";
   }
