@@ -305,12 +305,12 @@ export function AdminDashboardPage() {
           </CardHeader>
           <CardContent><DocumentTypeBarChart data={document_type_data} /></CardContent>
         </Card>
-        <Card>
+        <Card className="flex flex-col">
           <CardHeader>
             <CardTitle>Sensitivity distribution</CardTitle>
             <p className="text-xs text-text_medium">{stats.files_with_findings} files with findings</p>
           </CardHeader>
-          <CardContent><SensitivityChart data={sensitivity_data} /></CardContent>
+          <CardContent className="min-h-0 flex-1 pb-4"><SensitivityChart data={sensitivity_data} /></CardContent>
         </Card>
       </div>
 
