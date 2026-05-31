@@ -64,6 +64,8 @@ CUSTOM_REGEX_RECOGNIZERS = [
 # ---------------------------------------------------------------------------
 
 _analyzer = None
+_analyzer_lock = __import__("threading").Lock()
+_analyzer_built = False  # distinguishes "not built yet" from "built but None (no models)"
 
 
 def _build_analyzer():
@@ -106,9 +108,21 @@ def _build_analyzer():
 
 
 def _get_analyzer():
-    global _analyzer
-    if _analyzer is None:
-        _analyzer = _build_analyzer()
+    """Return the shared AnalyzerEngine, building it exactly once.
+
+    Thread-safe double-checked locking: the scan pipeline runs files across a
+    ThreadPoolExecutor, so without this lock the first scan could have several
+    threads building the (expensive, ~hundreds of MB) spaCy analyzer at the same
+    time. `_analyzer_built` lets us cache a legitimate None (no spaCy models →
+    regex-only mode) without re-attempting the costly build on every call.
+    """
+    global _analyzer, _analyzer_built
+    if _analyzer_built:
+        return _analyzer
+    with _analyzer_lock:
+        if not _analyzer_built:
+            _analyzer = _build_analyzer()
+            _analyzer_built = True
     return _analyzer
 
 
