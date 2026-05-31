@@ -345,22 +345,22 @@ export function AdminDashboardPage() {
       {/* Action required — always visible */}
       <Card className={all_clear
         ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/5"
-        : "border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5"
+        : "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/50"
       }>
         <CardHeader className="pb-2 pt-3">
-          <CardTitle className={`flex items-center gap-2 text-sm ${all_clear ? "text-emerald-700 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"}`}>
-            {all_clear ? <CheckCircle className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+          <CardTitle className={`flex items-center gap-2 text-sm ${all_clear ? "text-emerald-700 dark:text-emerald-300" : "text-text_dark"}`}>
+            {all_clear ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <AlertTriangle className="h-4 w-4 text-amber-500" />}
             {all_clear ? "All reviews up to date" : "Action required"}
           </CardTitle>
         </CardHeader>
         <CardContent className="pb-3">
           <div className="grid gap-6 md:grid-cols-3">
             <div className="space-y-1">
-              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Pending reviews</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Pending reviews</p>
               <button
                 onClick={() => router.push("/all-findings?status=pending")}
                 className={`text-3xl font-bold tabular-nums transition-opacity hover:opacity-70 ${
-                  (stats.pending_reviews_total ?? 0) > 0 ? "text-amber-800 dark:text-amber-300" : "text-emerald-700 dark:text-emerald-300"
+                  (stats.pending_reviews_total ?? 0) > 0 ? "text-text_dark" : "text-emerald-700 dark:text-emerald-300"
                 }`}
               >
                 {stats.pending_reviews_total ?? 0}
@@ -370,7 +370,7 @@ export function AdminDashboardPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Overdue &gt;30 days</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Overdue &gt;30 days</p>
               <p className={`text-3xl font-bold tabular-nums ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
                 {stats.overdue_reviews_count ?? 0}
               </p>
@@ -379,7 +379,7 @@ export function AdminDashboardPage() {
               </p>
             </div>
             <div className="space-y-1">
-              <p className={`text-[11px] font-semibold uppercase tracking-widest ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Cleanup overdue</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-text_medium">Cleanup overdue</p>
               <p className={`text-3xl font-bold tabular-nums ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
                 {stats.cleanup_overdue_count ?? 0}
               </p>
@@ -391,17 +391,17 @@ export function AdminDashboardPage() {
 
           {/* Top offenders */}
           {!all_clear && top_owners.filter(o => o.pending_reviews > 0).length > 0 && (
-            <div className="mt-4 border-t border-amber-200/60 pt-3 dark:border-amber-500/20">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-400">Top pending by owner</p>
+            <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-700">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Top pending by owner</p>
               <div className="grid gap-2 md:grid-cols-3">
                 {top_owners.filter(o => o.pending_reviews > 0).map(o => (
                   <button
                     key={o.user_id}
                     onClick={() => router.push(`/all-findings?owner=${o.user_id}&status=pending`)}
-                    className="flex items-center justify-between rounded-lg border border-amber-200 bg-white px-3 py-2 text-left transition-colors hover:bg-amber-50 dark:border-amber-500/20 dark:bg-slate-800/50 dark:hover:bg-amber-500/10"
+                    className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
                   >
                     <span className="text-sm font-medium text-text_dark">{o.name}</span>
-                    <span className="ml-2 shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+                    <span className="ml-2 shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-bold text-text_dark dark:bg-slate-600 dark:text-slate-200">
                       {o.pending_reviews}
                     </span>
                   </button>
