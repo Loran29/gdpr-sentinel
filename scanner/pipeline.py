@@ -227,6 +227,23 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
                 if not any(val_lower.endswith(s) or s in val_lower for s in system_suffixes):
                     continue
 
+        # EMAIL_ADDRESS: drop clearly non-personal system/noreply addresses.
+        # Keep role-based emails (procurement@, contact@) as they may belong
+        # to a named individual under GDPR Art. 4(1).
+        if ent["type"] == "EMAIL_ADDRESS":
+            local = val.split("@")[0].lower() if "@" in val else val.lower()
+            _noreply_prefixes = {
+                "noreply", "no-reply", "donotreply", "do-not-reply",
+                "postmaster", "webmaster", "mailer", "notification",
+                "notifications", "alert", "alerts", "newsletter",
+                "hrdirectemea",
+            }
+            if local in _noreply_prefixes:
+                continue
+            # Drop placeholder/template emails
+            if "example.com" in val.lower() and "." not in val.split("@")[0]:
+                continue
+
         # PHONE_NUMBER: must contain at least 7 digits; drop IBAN fragments.
         if ent["type"] == "PHONE_NUMBER":
             digits = sum(c.isdigit() for c in val)
@@ -578,6 +595,20 @@ def _scan_one_file(
 
     # Apply contextual filters to reduce false positives.
     merged = _filter_entities(merged, full_text, llm_result["document_type"])
+
+    # Quality gate: require at least one high-confidence deterministic entity
+    # (presidio/regex, confidence ≥ 0.7) OR at least 2 entities total.
+    # This prevents near-empty findings from incident reports and clean docs
+    # that only have low-confidence LLM extractions.
+    deterministic_confident = [
+        e for e in merged
+        if e["detector"] in ("presidio", "regex") and e["confidence"] >= 0.7
+    ]
+    if not deterministic_confident and len(merged) < 2:
+        t_db = time.perf_counter()
+        _upsert_file_only(fm, sha, owner_user_id=connector.get_owner(fm.path))
+        db_ms = (time.perf_counter() - t_db) * 1000
+        return {"_timings": {"extract_ms": extract_ms, "presidio_ms": presidio_ms, "llm_ms": llm_ms, "db_ms": db_ms}}
 
     # No entities → no flagged finding.
     if not merged:
