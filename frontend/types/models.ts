@@ -69,8 +69,10 @@ export type Finding = {
   reviewed_by_user_id: string | null;
   reviewed_at: string | null;
   review_note: string | null;
-  legal_basis: string | null;
-  cleanup_deadline: string | null;
+  // Optional: only set after a "keep (business need)" / "acknowledge cleanup"
+  // action. Mock fixtures and freshly-scanned findings omit them.
+  legal_basis?: string | null;
+  cleanup_deadline?: string | null;
 };
 
 export type Scan = {
@@ -147,7 +149,8 @@ export type AuditEntry = {
     | "marked_false_positive"
     | "deleted"
     | "confirmed_business_need"
-    | "acknowledged_cleanup";
+    | "acknowledged_cleanup"
+    | "cleanup_overdue";
 };
 
 export type SourceOption = {
