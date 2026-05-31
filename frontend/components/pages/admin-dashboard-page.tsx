@@ -367,9 +367,9 @@ export function AdminDashboardPage() {
               </button>
               <button
                 onClick={() => router.push("/all-findings?status=pending")}
-                className={`text-xs transition-opacity hover:opacity-70 ${(stats.pending_reviews_total ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-bosch_blue font-medium"}`}
+                className={`block text-xs transition-opacity hover:opacity-70 ${(stats.pending_reviews_total ?? 0) === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-text_medium"}`}
               >
-                {(stats.pending_reviews_total ?? 0) === 0 ? "✓ All reviewed" : "Click to view →"}
+                {(stats.pending_reviews_total ?? 0) === 0 ? "✓ All reviewed" : "View pending →"}
               </button>
             </div>
             <div className="space-y-1">
