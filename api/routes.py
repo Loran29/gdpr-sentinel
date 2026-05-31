@@ -590,17 +590,27 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     }
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     retention_rows = db.execute(
-        select(Finding.document_type, Finding.scan_timestamp)
+        select(Finding.file_id, Finding.document_type, Finding.scan_timestamp, Finding.document_year)
         .where(
             Finding.review_status == "pending",
             Finding.document_type.in_(list(RETENTION_YEARS.keys())),
         )
     ).all()
-    files_past_retention = sum(
-        1
-        for doc_type, scan_ts in retention_rows
-        if scan_ts < now - timedelta(days=365 * RETENTION_YEARS[doc_type])
-    )
+    # Deduplicate by file_id (latest finding per file wins — same as retention endpoint).
+    seen_files: set[str] = set()
+    files_past_retention = 0
+    for file_id, doc_type, scan_ts, doc_year in retention_rows:
+        if file_id in seen_files:
+            continue
+        seen_files.add(file_id)
+        years = RETENTION_YEARS[doc_type]
+        base_year = doc_year if doc_year else scan_ts.year
+        try:
+            deadline = scan_ts.replace(year=base_year + years)
+        except ValueError:
+            deadline = scan_ts.replace(year=scan_ts.year + years)
+        if deadline < now:
+            files_past_retention += 1
 
     return DashboardStatsOut(
         total_files_scanned=int(total_files or 0),
@@ -712,6 +722,9 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
     compliant: list[RetentionFileOut] = []
 
     for f, fl in unique:
+        # Skip unknown document types — retention period cannot be determined.
+        if f.document_type not in RETENTION_YEARS_MAP:
+            continue
         years = RETENTION_YEARS_MAP.get(f.document_type, 3)
         # Use document_year if extracted; fall back to scan_timestamp year.
         # This ensures Old_Expense_2018.pdf shows deadline 2028, not 2036.
@@ -1362,6 +1375,8 @@ def retention_notify(
         if fl.id in seen:
             continue
         seen.add(fl.id)
+        if f.document_type not in RETENTION_YEARS_MAP:
+            continue
         years = RETENTION_YEARS_MAP.get(f.document_type, 3)
         base_year = f.document_year if f.document_year else f.scan_timestamp.year
         try:
