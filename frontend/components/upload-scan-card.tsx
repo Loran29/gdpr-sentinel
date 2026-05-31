@@ -28,8 +28,10 @@ export function UploadScanCard() {
   }, []);
 
   const handle_files = useCallback((new_files: FileList | File[]) => {
-    const pdfs = Array.from(new_files).filter(f => f.name.toLowerCase().endsWith(".pdf"));
-    if (pdfs.length === 0) { set_error("Only PDF files are supported."); return; }
+    const pdfs = Array.from(new_files).filter(f =>
+      f.name.toLowerCase().endsWith(".pdf") || f.name.toLowerCase().endsWith(".docx")
+    );
+    if (pdfs.length === 0) { set_error("Only PDF and Word (.docx) files are supported."); return; }
     set_error(null);
     set_files(prev => {
       const names = new Set(prev.map(f => f.name));
@@ -130,12 +132,12 @@ export function UploadScanCard() {
             className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-border_grey py-8 text-center transition-colors hover:border-bosch_blue/50 hover:bg-bosch_blue/5"
           >
             <Upload className="mb-2 h-8 w-8 text-text_medium" />
-            <p className="text-sm font-medium text-text_dark">Drop PDFs here or click to browse</p>
-            <p className="mt-1 text-xs text-text_medium">Supports multiple files at once</p>
+            <p className="mt-1 text-sm font-medium text-text_dark">Drop PDFs or Word docs here or click to browse</p>
+            <p className="mt-1 text-xs text-text_medium">Supports .pdf and .docx · multiple files at once</p>
             <input
               ref={input_ref}
               type="file"
-              accept=".pdf"
+              accept=".pdf,.docx"
               multiple
               className="hidden"
               onChange={e => e.target.files && handle_files(e.target.files)}

@@ -1,10 +1,12 @@
-"""pdfplumber wrapper with OCR fallback for scanned/image-only PDFs.
+"""Text extractor for PDF and Word (.docx) documents.
 
-Flow:
+PDF flow:
   1. pdfplumber  — native text layer (fast, exact)
   2. byte-sweep  — regex over raw PDF stream (synthetic/placeholder PDFs)
-  3. OCR         — pytesseract + pdf2image if both are installed and tesseract
-                   binary is on PATH (activated automatically, no config needed)
+  3. OCR         — pytesseract + pdf2image if both are installed
+
+Word flow:
+  1. python-docx — paragraph + table cell extraction
 """
 
 from __future__ import annotations
@@ -23,7 +25,45 @@ class PageText:
     text: str
 
 
-def extract_text(pdf_bytes: bytes) -> list[PageText]:
+def extract_text(file_bytes: bytes, filename: str = "") -> list[PageText]:
+    """Dispatch to the correct extractor based on file extension or magic bytes."""
+    name_lower = filename.lower()
+    if name_lower.endswith(".docx"):
+        return _extract_docx(file_bytes)
+    # Default: treat as PDF (original behaviour)
+    return _extract_pdf(file_bytes)
+
+
+def _extract_docx(docx_bytes: bytes) -> list[PageText]:
+    """Extract text from a Word .docx file using python-docx."""
+    try:
+        from docx import Document  # type: ignore
+        doc = Document(io.BytesIO(docx_bytes))
+        lines: list[str] = []
+
+        # Paragraphs
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if text:
+                lines.append(text)
+
+        # Tables (e.g. form fields in IT access requests)
+        for table in doc.tables:
+            for row in table.rows:
+                row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                if row_text:
+                    lines.append(row_text)
+
+        full_text = "\n".join(lines)
+        if full_text.strip():
+            return [PageText(page_number=1, text=full_text)]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("python-docx extraction failed: %s", exc)
+
+    return [PageText(page_number=1, text="")]
+
+
+def _extract_pdf(pdf_bytes: bytes) -> list[PageText]:
     """Extract per-page text from a PDF, with OCR fallback for scanned docs."""
     pages: list[PageText] = []
     try:
@@ -63,7 +103,6 @@ def _try_ocr(pdf_bytes: bytes) -> list[PageText]:
         return []
 
     try:
-        # Probe tesseract binary — raises if not installed.
         pytesseract.get_tesseract_version()
     except Exception:  # noqa: BLE001
         return []
@@ -72,7 +111,6 @@ def _try_ocr(pdf_bytes: bytes) -> list[PageText]:
         images = convert_from_bytes(pdf_bytes, dpi=200)
         result: list[PageText] = []
         for i, img in enumerate(images, start=1):
-            # Run both EN and DE OCR; pick the longer result.
             text_en = pytesseract.image_to_string(img, lang="eng") or ""
             try:
                 text_de = pytesseract.image_to_string(img, lang="deu") or ""

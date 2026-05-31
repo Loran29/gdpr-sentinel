@@ -943,7 +943,7 @@ async def upload_and_scan(
 
     saved_paths = []
     for upload in files:
-        if not (upload.filename or "").lower().endswith(".pdf"):
+        if not (upload.filename or "").lower().endswith((".pdf", ".docx")):
             continue
         safe_name = _re.sub(r"[^\w\-.]", "_", upload.filename or "upload.pdf")
         dest = upload_dir / safe_name

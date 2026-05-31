@@ -532,7 +532,7 @@ def _scan_one_file(
     mod_routing: list[tuple[str, str]],
 ) -> Optional[dict]:
     t_extract = time.perf_counter()
-    pages = extract_text(data)
+    pages = extract_text(data, filename=fm.name)
     full_text = "\n".join(p.text for p in pages if p.text)
     extract_ms = (time.perf_counter() - t_extract) * 1000
 

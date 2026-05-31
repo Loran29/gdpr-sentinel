@@ -10,9 +10,9 @@ export function OwnerTable({ owners }: { owners: OwnerSummary[] }) {
           <TableHead>Name</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Assigned sources</TableHead>
-          <TableHead className="text-right">Files assigned</TableHead>
-          <TableHead className="text-right">Pending reviews</TableHead>
-          <TableHead className="text-right">Completed reviews</TableHead>
+          <TableHead className="text-center">Files assigned</TableHead>
+          <TableHead className="text-center">Pending reviews</TableHead>
+          <TableHead className="text-center">Completed reviews</TableHead>
           <TableHead>Suggested next step</TableHead>
         </TableRow>
       </TableHeader>
@@ -32,13 +32,13 @@ export function OwnerTable({ owners }: { owners: OwnerSummary[] }) {
                 ))}
               </div>
             </TableCell>
-            <TableCell className="text-right">{owner.files_assigned}</TableCell>
-            <TableCell className="text-right">
+            <TableCell className="text-center">{owner.files_assigned}</TableCell>
+            <TableCell className="text-center">
               <span className={owner.pending_reviews > 0 ? "font-semibold text-bosch_red" : "text-text_dark"}>
                 {owner.pending_reviews}
               </span>
             </TableCell>
-            <TableCell className="text-right text-success_green">{owner.completed_reviews}</TableCell>
+            <TableCell className="text-center text-success_green">{owner.completed_reviews}</TableCell>
             <TableCell className="text-sm text-text_medium">
               {owner.pending_reviews > 0
                 ? "Prioritize pending review queue"

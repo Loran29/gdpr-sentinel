@@ -1,9 +1,4 @@
-"""LocalFolderConnector — reads PDFs from a directory tree on disk.
-
-This is the connector used in the demo. Owner attribution comes from
-`master_of_data.yaml#direct_owner_patterns`; if the file path matches one of those
-prefixes, the matching user_id is returned.
-"""
+"""LocalFolderConnector — reads PDFs and Word docs from a directory tree on disk."""
 
 from __future__ import annotations
 
@@ -33,8 +28,10 @@ class LocalFolderConnector(Connector):
         if not self.root.exists():
             return []
         out: list[FileMeta] = []
-        for p in sorted(self.root.rglob("*.pdf")):
+        for p in sorted(self.root.rglob("*")):
             if not p.is_file():
+                continue
+            if p.suffix.lower() not in (".pdf", ".docx"):
                 continue
             stat = p.stat()
             mt, _ = mimetypes.guess_type(p.name)
@@ -44,7 +41,7 @@ class LocalFolderConnector(Connector):
                     name=p.name,
                     size_bytes=stat.st_size,
                     last_modified=datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
-                    mime_type=mt or "application/pdf",
+                    mime_type=mt or "application/octet-stream",
                 )
             )
         return out

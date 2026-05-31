@@ -12,6 +12,7 @@ import { source_options } from "@/lib/mock-data";
 import { use_app_state } from "@/context/app-state";
 import { get_scan, run_delta_scan, run_full_scan } from "@/src/lib/api-client";
 import { Scan } from "@/types/models";
+import { UploadScanCard } from "@/components/upload-scan-card";
 
 export function RunScanPage() {
   const { append_scan } = use_app_state();
@@ -215,6 +216,8 @@ export function RunScanPage() {
           </CardContent>
         </Card>
       )}
+
+      <UploadScanCard />
     </div>
   );
 }
