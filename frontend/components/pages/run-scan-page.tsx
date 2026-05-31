@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Cloud, CloudOff, ExternalLink, Play, RefreshCw } from "lucide-react";
+import { Cloud, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { source_options } from "@/lib/mock-data";
 import { use_app_state } from "@/context/app-state";
-import { get_scan, run_delta_scan, run_full_scan } from "@/src/lib/api-client";
+import { get_scan, get_scheduler_config, run_delta_scan, run_full_scan, set_scheduler_config } from "@/src/lib/api-client";
 import { Scan } from "@/types/models";
 import { UploadScanCard } from "@/components/upload-scan-card";
 
@@ -153,18 +153,10 @@ export function RunScanPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Reproducibility note</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-text_dark">
-              Same input plus same ruleset yields the same result hash. Delta scans skip unchanged files by
-              SHA256.
-            </p>
-          </CardContent>
-        </Card>
+        <OneDriveCard />
       </div>
+
+      <SchedulerCard />
 
       {(is_running || completed_scan) && (
         <Card>
@@ -220,8 +212,6 @@ export function RunScanPage() {
       )}
 
       <UploadScanCard />
-
-      <OneDriveCard />
     </div>
   );
 }
@@ -235,8 +225,7 @@ function Metric({ label, value, monospace }: { label: string; value: string; mon
   );
 }
 
-function OneDriveCard() {
-  const [status, set_status] = useState<{ connected: boolean; user_name: string | null; user_email: string | null; azure_configured: boolean } | null>(null);
+function OneDriveCard() {  const [status, set_status] = useState<{ connected: boolean; user_name: string | null; user_email: string | null; azure_configured: boolean } | null>(null);
   const [scanning, set_scanning] = useState(false);
   const [progress, set_progress] = useState(0);
   const [done, set_done] = useState(false);
@@ -341,3 +330,98 @@ function OneDriveCard() {
     </Card>
   );
 }
+
+function SchedulerCard() {
+  const PRESETS = [
+    { label: "Off", value: 0 },
+    { label: "1 day", value: 1 },
+    { label: "3 days", value: 3 },
+    { label: "7 days", value: 7 },
+    { label: "14 days", value: 14 },
+    { label: "30 days", value: 30 },
+  ];
+
+  const [scheduler, set_scheduler] = useState<{ interval_minutes: number; running: boolean; next_run_at: string | null }>({ interval_minutes: 0, running: false, next_run_at: null });
+  const [saving, set_saving] = useState(false);
+  const [input, set_input] = useState("0");
+
+  useEffect(() => {
+    get_scheduler_config().then(s => {
+      set_scheduler(s as any);
+      set_input(String(s.interval_minutes > 0 ? Math.round((s.interval_minutes / 1440) * 10) / 10 : 0));
+    }).catch(() => {});
+  }, []);
+
+  const save = async () => {
+    const days = parseFloat(input);
+    if (isNaN(days) || days < 0) return;
+    set_saving(true);
+    const result = await set_scheduler_config(Math.round(days * 24 * 60));
+    if (result.ok) set_scheduler(result.data as any);
+    set_saving(false);
+  };
+
+  const scheduler_days = scheduler.interval_minutes > 0
+    ? Math.round((scheduler.interval_minutes / 1440) * 10) / 10 : 0;
+  const input_days = parseFloat(input);
+
+  return (
+    <Card className="p-3.5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
+            <RefreshCw className="h-4 w-4 text-bosch_blue" />
+          </span>
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-text_medium">Auto delta scan</p>
+            <p className="text-xs text-text_medium">
+              {scheduler.running
+                ? scheduler.next_run_at
+                  ? `Next run in ~${Math.max(0, Math.round((new Date(scheduler.next_run_at).getTime() - Date.now()) / 86400000 * 10) / 10)} days`
+                  : "Running"
+                : "Disabled — runs delta scan automatically on a schedule"}
+            </p>
+          </div>
+        </div>
+        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${scheduler.running ? "bg-success_green/15 text-success_green" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>
+          {scheduler.running ? `EVERY ${scheduler_days}d` : "OFF"}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {PRESETS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => set_input(String(opt.value))}
+            className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              input_days === opt.value
+                ? "border-bosch_blue bg-bosch_blue/10 text-bosch_blue"
+                : "border-border_grey bg-white text-text_medium hover:border-text_medium hover:text-text_dark dark:bg-slate-800 dark:hover:bg-slate-700"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={input}
+            onChange={(e) => set_input(e.target.value)}
+            className="w-16 rounded-md border border-border_grey bg-white px-2.5 py-1 text-xs text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
+            placeholder="0"
+          />
+          <span className="text-xs text-text_medium">days</span>
+        </div>
+        <button
+          onClick={save}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 rounded-md bg-bosch_blue px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-bosch_blue/85 disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Apply"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+

@@ -19,12 +19,14 @@ import {
   DisplayReviewStatus,
   ResourceHealth,
   RetentionView,
+  SchedulerConfig,
   ScanRunResponse,
   UiAction
 } from "@/src/lib/api-types";
 
 const API_BASE_URL_DEFAULT = "http://localhost:8000";
 const DEFAULT_TIMEOUT_MS = 8000;
+const SCAN_TIMEOUT_MS = 60000;
 
 const api_base_url = (process.env.NEXT_PUBLIC_API_BASE_URL ?? API_BASE_URL_DEFAULT).replace(/\/+$/, "");
 const use_mock_api =
@@ -100,13 +102,15 @@ async function safe_request<T>({
   method = "GET",
   query,
   user_id,
-  body
+  body,
+  timeout_ms = DEFAULT_TIMEOUT_MS
 }: {
   path: string;
   method?: "GET" | "POST";
   query?: Record<string, string | number | undefined>;
   user_id?: string;
   body?: unknown;
+  timeout_ms?: number;
 }): Promise<ApiMutationResult<T>> {
   const headers: Record<string, string> = {
     Accept: "application/json"
@@ -121,7 +125,7 @@ async function safe_request<T>({
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeout_ms);
 
   try {
     const response = await fetch(with_url(path, query), {
@@ -386,7 +390,8 @@ export async function run_full_scan(source_path: string): Promise<ApiMutationRes
   return safe_request<ScanRunResponse>({
     path: "/scan/run",
     method: "POST",
-    body: { source_path }
+    body: { source_path },
+    timeout_ms: SCAN_TIMEOUT_MS
   });
 }
 
@@ -406,7 +411,8 @@ export async function run_delta_scan(source_path: string): Promise<ApiMutationRe
   return safe_request<ScanRunResponse>({
     path: "/scan/delta",
     method: "POST",
-    body: { source_path }
+    body: { source_path },
+    timeout_ms: SCAN_TIMEOUT_MS
   });
 }
 
@@ -491,6 +497,24 @@ export async function get_resource_health(): Promise<ApiClientQueryTypes["resour
   return query_with_fallback<ResourceHealth>({
     path: "/admin/health",
     fallback: () => clone_value(build_resource_health_from_mock_data())
+  });
+}
+
+export async function get_scheduler_config(): Promise<SchedulerConfig> {
+  return query_with_fallback<SchedulerConfig>({
+    path: "/admin/scheduler",
+    fallback: () => ({ interval_minutes: 0, running: false, next_run_at: null })
+  });
+}
+
+export async function set_scheduler_config(interval_minutes: number): Promise<ApiMutationResult<SchedulerConfig>> {
+  if (api_runtime_config.mock_mode) {
+    return { ok: true, source: "mock", data: { interval_minutes, running: interval_minutes > 0, next_run_at: null } };
+  }
+  return safe_request<SchedulerConfig>({
+    path: "/admin/scheduler",
+    method: "POST",
+    body: { interval_minutes }
   });
 }
 

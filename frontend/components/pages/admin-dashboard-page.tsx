@@ -43,7 +43,7 @@ export function AdminDashboardPage() {
   const load_stats = useCallback(async () => {
     const [resolved_stats, health] = await Promise.all([
       get_admin_dashboard(),
-      get_resource_health()
+      get_resource_health(),
     ]);
     set_stats(resolved_stats);
     set_ram_mb(health.memory_peak_mb);

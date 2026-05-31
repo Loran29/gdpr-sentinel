@@ -52,16 +52,6 @@ export function DataOwnersPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Routing rules</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-text_dark">
-          <p>1. If path matches <span className="font-mono">/data/onedrive/{"{username}"}/</span>, route to direct owner.</p>
-          <p>2. Else if path is under a configured Master of Data source, route to that Master of Data.</p>
-          <p>3. Else route to default Master of Data.</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }

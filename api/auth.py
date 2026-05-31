@@ -35,7 +35,7 @@ _token_store: dict = {
 }
 _token_lock = threading.Lock()
 
-SCOPES = ["Files.Read", "offline_access", "User.Read"]
+SCOPES = ["Files.Read", "User.Read"]
 
 
 def get_token() -> Optional[str]:

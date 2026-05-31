@@ -61,8 +61,9 @@ export function format_timestamp(timestamp: string): string {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    timeZone: "UTC"
-  }) + " UTC";
+    timeZone: "Europe/Berlin",
+    timeZoneName: "short",
+  });
 }
 
 export function format_timestamp_short(timestamp: string): string {

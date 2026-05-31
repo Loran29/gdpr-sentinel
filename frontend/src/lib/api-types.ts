@@ -77,6 +77,12 @@ export type ResourceHealth = {
   checked_at: string;
 };
 
+export type SchedulerConfig = {
+  interval_minutes: number;
+  running: boolean;
+  next_run_at: string | null;
+};
+
 export type ApiClientQueryTypes = {
   users: User[];
   findings_by_user: Finding[];
@@ -88,4 +94,5 @@ export type ApiClientQueryTypes = {
   audit_log: AuditEntry[];
   retention_view: RetentionView;
   resource_health: ResourceHealth;
+  scheduler_config: SchedulerConfig;
 };

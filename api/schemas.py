@@ -156,6 +156,16 @@ class HealthDetailOut(BaseModel):
     checked_at: str = ""
 
 
+class SchedulerConfigOut(BaseModel):
+    interval_minutes: int
+    running: bool
+    next_run_at: Optional[str] = None
+
+
+class SchedulerConfigIn(BaseModel):
+    interval_minutes: int
+
+
 class RetentionFileOut(BaseModel):
     file_id: str
     file_name: str
