@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -24,13 +25,14 @@ import { ResourceIntensityCard } from "@/components/resource-intensity-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { dashboard_stats, reproducibility_snapshot, resource_intensity } from "@/lib/mock-data";
-import { format_bytes, format_number, format_timestamp } from "@/lib/utils";
-import { get_admin_dashboard, get_resource_health, get_scan, run_full_scan, run_delta_scan } from "@/src/lib/api-client";
-import { DashboardStats } from "@/types/models";
+import { format_bytes, format_number, format_timestamp, format_timestamp_short } from "@/lib/utils";
+import { get_admin_dashboard, get_admin_owners, get_resource_health, get_scan, run_full_scan, run_delta_scan } from "@/src/lib/api-client";
+import { DashboardStats, OwnerSummary } from "@/types/models";
 import { use_app_state } from "@/context/app-state";
 
 export function AdminDashboardPage() {
   const { append_scan } = use_app_state();
+  const router = useRouter();
   const [stats, set_stats] = useState<DashboardStats>(dashboard_stats);
   const [ram_mb, set_ram_mb] = useState<number | null>(null);
   const [cpu_pct, set_cpu_pct] = useState<number | null>(null);
@@ -39,21 +41,30 @@ export function AdminDashboardPage() {
   const [scan_current_file, set_scan_current_file] = useState<string | null>(null);
   const [scan_elapsed, set_scan_elapsed] = useState(0);
   const poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [top_owners, set_top_owners] = useState<OwnerSummary[]>([]);
 
   const load_stats = useCallback(async () => {
-    const [resolved_stats, health] = await Promise.all([
+    const [resolved_stats, health, owners] = await Promise.all([
       get_admin_dashboard(),
       get_resource_health(),
+      get_admin_owners(),
     ]);
     set_stats(resolved_stats);
     set_ram_mb(health.memory_peak_mb);
     set_cpu_pct(health.cpu_load_pct);
+    set_top_owners(
+      [...owners].sort((a, b) => b.pending_reviews - a.pending_reviews).slice(0, 3)
+    );
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     load_stats().catch(() => {});
-    return () => { cancelled = true; };
+    // Auto-refresh every 30s so dashboard stays live during scans
+    const interval = setInterval(() => {
+      if (!cancelled) load_stats().catch(() => {});
+    }, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [load_stats]);
 
   const stop_poll = useCallback(() => {
@@ -140,6 +151,15 @@ export function AdminDashboardPage() {
     { label: "DB", ms: timing.db_ms ?? 0, color: "bg-success_green" },
   ] : null;
 
+  // Sparkline: findings count over last 5 scans (4)
+  const sparkline_data = (stats.recent_scans ?? []).slice(0, 5).reverse().map(s => s.findings_count);
+  const sparkline_max = Math.max(...sparkline_data, 1);
+
+  // Compliance status for action required card
+  const all_clear = (stats.pending_reviews_total ?? 0) === 0
+    && (stats.overdue_reviews_count ?? 0) === 0
+    && (stats.cleanup_overdue_count ?? 0) === 0;
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between">
@@ -193,8 +213,36 @@ export function AdminDashboardPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard icon={HardDrive} label="Total files scanned" value={format_number(stats.total_files_scanned)} />
           <KpiCard icon={Server} label="Total data volume" value={format_bytes(stats.total_size_bytes)} />
-          <KpiCard icon={AlertTriangle} label="Files flagged" value={format_number(stats.files_with_findings)} value_class_name="text-bosch_red" />
-          <KpiCard icon={FileSearch} label="Total findings" value={String(stats.total_findings)} />
+          {/* Merged: files with PII findings + sparkline trend (4, 9) */}
+          <Card className="flex h-full min-h-[122px] flex-col p-3.5">
+            <div className="mb-2 flex items-start justify-between">
+              <p className="text-[11px] uppercase tracking-wide text-text_medium">Files with PII findings</p>
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
+                <FileSearch className="h-4 w-4 text-bosch_blue" />
+              </span>
+            </div>
+            <div className="mt-auto flex items-end justify-between gap-2">
+              <div>
+                <p className="text-[25px] font-semibold leading-none tabular-nums text-bosch_red">
+                  {format_number(stats.files_with_findings)}
+                </p>
+                <p className="mt-1 text-xs text-text_medium">{stats.total_findings} entities detected</p>
+              </div>
+              {/* Sparkline */}
+              {sparkline_data.length > 1 && (
+                <div className="flex items-end gap-0.5 pb-0.5" title="Findings trend (last 5 scans)">
+                  {sparkline_data.map((v, i) => (
+                    <div
+                      key={i}
+                      className="w-2 rounded-sm bg-bosch_blue/60"
+                      style={{ height: `${Math.max(4, (v / sparkline_max) * 32)}px` }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+          <KpiCard icon={Gauge} label="Scan speed" value={`${cached_speed} files/sec`} subtitle={last_duration ? `Cold: ${last_duration.toFixed(1)}s · Cached: ~2s` : undefined} />
         </div>
       </div>
 
@@ -202,19 +250,9 @@ export function AdminDashboardPage() {
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Scan accuracy</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard icon={Gauge} label="Scan speed" value={`${cached_speed} files/sec`} subtitle={last_duration ? `Cold: ${last_duration.toFixed(1)}s · Cached: ~2s` : undefined} />
           <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · delta ~76× faster with cache" />
           <KpiCard icon={CheckCircle} label="Detection precision" value={`${stats.precision_pct}%`} subtitle={`F1: ${stats.f1_score} · balance of precision & recall`} value_class_name="text-success_green" />
           <KpiCard icon={Activity} label="Recall" value={`${stats.recall_pct}%`} subtitle="% of real PII caught — higher is safer" />
-        </div>
-      </div>
-
-      {/* Row 3 — resource intensity */}
-      <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Resource intensity</p>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
-          <KpiCard icon={Cpu} label="CPU load" value={cpu_pct !== null ? `${cpu_pct}%` : "—"} subtitle="during last scan" value_class_name={cpu_pct !== null && cpu_pct > 80 ? "text-bosch_red" : undefined} />
           {has_retention_card && (
             <KpiCard
               icon={AlertTriangle}
@@ -224,6 +262,15 @@ export function AdminDashboardPage() {
               value_class_name={(stats.files_past_retention ?? 0) > 0 ? "text-bosch_red" : "text-success_green"}
             />
           )}
+        </div>
+      </div>
+
+      {/* Row 3 — resource intensity */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Resource intensity</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
+          <KpiCard icon={Cpu} label="CPU load" value={cpu_pct !== null ? `${cpu_pct}%` : "—"} subtitle="during last scan" value_class_name={cpu_pct !== null && cpu_pct > 80 ? "text-bosch_red" : undefined} />
           {/* Connectors status */}
           <Card className="flex h-full min-h-[122px] flex-col p-3.5">
             <div className="mb-2 flex items-start justify-between">
@@ -251,74 +298,111 @@ export function AdminDashboardPage() {
 
       <div className="grid gap-3 xl:grid-cols-[2fr_1fr]">
         <Card>
-          <CardHeader><CardTitle>Findings by document type</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Findings by document type</CardTitle>
+            <p className="text-xs text-text_medium">{stats.total_files_scanned} files · last scan {stats.last_scan_at ? format_timestamp_short(stats.last_scan_at) : "—"}</p>
+          </CardHeader>
           <CardContent><DocumentTypeBarChart data={document_type_data} /></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Sensitivity distribution</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle>Sensitivity distribution</CardTitle>
+            <p className="text-xs text-text_medium">{stats.files_with_findings} files with findings</p>
+          </CardHeader>
           <CardContent><SensitivityChart data={sensitivity_data} /></CardContent>
         </Card>
       </div>
 
-      {/* Timing breakdown mini-bar (8) */}
+      {/* Timing breakdown — tooltip-only legend (7, 8) */}
       {timing_bars && (
         <Card className="p-3.5">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold text-text_dark">Pipeline timing breakdown</p>
             <p className="text-xs text-text_medium">Last scan · {timing_total.toFixed(0)} ms total</p>
           </div>
-          <div className="flex h-5 w-full overflow-hidden rounded-full">
+          <div className="flex h-6 w-full overflow-hidden rounded-lg">
             {timing_bars.map(({ label, ms, color }) => (
               <div
                 key={label}
                 className={`${color} h-full`}
                 style={{ width: `${(ms / timing_total) * 100}%` }}
-                title={`${label}: ${ms.toFixed(0)}ms`}
+                title={`${label}: ${ms.toFixed(0)}ms (${((ms / timing_total) * 100).toFixed(0)}%)`}
               />
             ))}
           </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
             {timing_bars.map(({ label, ms, color }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <span className={`h-2.5 w-2.5 rounded-sm ${color}`} />
-                <span className="text-xs text-text_medium">{label}</span>
-                <span className="text-xs font-medium text-text_dark">{ms.toFixed(0)}ms</span>
-                <span className="text-xs text-text_medium">({((ms / timing_total) * 100).toFixed(0)}%)</span>
-              </div>
+              <span key={label} className="flex items-center gap-1 text-xs text-text_medium">
+                <span className={`inline-block h-2 w-2 rounded-sm ${color}`} />
+                {label}: <span className="font-medium text-text_dark">{ms.toFixed(0)}ms</span>
+              </span>
             ))}
           </div>
         </Card>
       )}
 
-      {/* Action required — compliance alerts */}
-      {((stats.pending_reviews_total ?? 0) > 0 || (stats.overdue_reviews_count ?? 0) > 0 || (stats.cleanup_overdue_count ?? 0) > 0) && (
-        <Card className="border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5">
-          <CardHeader className="pb-2 pt-3">
-            <CardTitle className="flex items-center gap-2 text-sm text-amber-800 dark:text-amber-300">
-              <AlertTriangle className="h-4 w-4" />
-              Action required
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 pb-3 md:grid-cols-3">
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Pending reviews</p>
-              <p className="mt-0.5 text-2xl font-semibold text-amber-800 dark:text-amber-300">{stats.pending_reviews_total ?? 0}</p>
+      {/* Action required — always visible (1, 2, 6) */}
+      <Card className={all_clear
+        ? "border-emerald-200 bg-emerald-50/50 dark:border-emerald-500/30 dark:bg-emerald-500/5"
+        : "border-amber-300 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-500/5"
+      }>
+        <CardHeader className="pb-2 pt-3">
+          <CardTitle className={`flex items-center gap-2 text-sm ${all_clear ? "text-emerald-700 dark:text-emerald-300" : "text-amber-800 dark:text-amber-300"}`}>
+            {all_clear
+              ? <CheckCircle className="h-4 w-4" />
+              : <AlertTriangle className="h-4 w-4" />
+            }
+            {all_clear ? "All reviews up to date" : "Action required"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 pb-3 md:grid-cols-3">
+          <div>
+            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Pending reviews</p>
+            <button
+              onClick={() => router.push("/all-findings?status=pending")}
+              className={`mt-0.5 text-2xl font-semibold tabular-nums transition-opacity hover:opacity-70 ${
+                (stats.pending_reviews_total ?? 0) > 0 ? "text-amber-800 dark:text-amber-300 underline underline-offset-2" : "text-emerald-700 dark:text-emerald-300"
+              }`}
+            >
+              {stats.pending_reviews_total ?? 0}
+            </button>
+            {(stats.pending_reviews_total ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ All reviewed</p>}
+          </div>
+          <div>
+            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Overdue &gt;30 days</p>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
+              {stats.overdue_reviews_count ?? 0}
+            </p>
+            {(stats.overdue_reviews_count ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ No overdue</p>}
+          </div>
+          <div>
+            <p className={`text-[11px] uppercase tracking-wide ${all_clear ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>Cleanup overdue</p>
+            <p className={`mt-0.5 text-2xl font-semibold tabular-nums ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-emerald-700 dark:text-emerald-300"}`}>
+              {stats.cleanup_overdue_count ?? 0}
+            </p>
+            {(stats.cleanup_overdue_count ?? 0) === 0 && <p className="text-xs text-emerald-600 dark:text-emerald-400">✓ All clean</p>}
+          </div>
+        </CardContent>
+        {/* Top offenders (6) */}
+        {!all_clear && top_owners.filter(o => o.pending_reviews > 0).length > 0 && (
+          <div className="border-t border-amber-200/60 px-4 pb-3 pt-2 dark:border-amber-500/20">
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Top pending by owner</p>
+            <div className="space-y-1">
+              {top_owners.filter(o => o.pending_reviews > 0).map(o => (
+                <div key={o.user_id} className="flex items-center justify-between">
+                  <span className="text-sm text-text_dark">{o.name}</span>
+                  <button
+                    onClick={() => router.push(`/all-findings?owner=${o.user_id}&status=pending`)}
+                    className="text-sm font-semibold text-amber-700 underline underline-offset-2 hover:opacity-70 dark:text-amber-300"
+                  >
+                    {o.pending_reviews} pending
+                  </button>
+                </div>
+              ))}
             </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Overdue reviews (&gt;30 days)</p>
-              <p className={`mt-0.5 text-2xl font-semibold ${(stats.overdue_reviews_count ?? 0) > 0 ? "text-bosch_red" : "text-amber-800 dark:text-amber-300"}`}>
-                {stats.overdue_reviews_count ?? 0}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-amber-700 dark:text-amber-400">Cleanup overdue</p>
-              <p className={`mt-0.5 text-2xl font-semibold ${(stats.cleanup_overdue_count ?? 0) > 0 ? "text-bosch_red" : "text-amber-800 dark:text-amber-300"}`}>
-                {stats.cleanup_overdue_count ?? 0}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-3 xl:grid-cols-[1.6fr_1fr]">
         <RecentScansCard recent_scans={stats.recent_scans ?? []} />

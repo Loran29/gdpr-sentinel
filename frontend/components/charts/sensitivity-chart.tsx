@@ -1,54 +1,47 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
-
-const color_map: Record<string, string> = {
-  high: "#E00420",
-  medium: "#FFCF00",
-  low: "#00884A"
-};
-
 export function SensitivityChart({ data }: { data: Array<{ name: string; value: number }> }) {
-  const [is_dark, set_is_dark] = useState(false);
+  const total = data.reduce((s, d) => s + d.value, 0);
+  if (total === 0) return <div className="flex h-24 items-center justify-center text-sm text-text_medium">No findings yet</div>;
 
-  useEffect(() => {
-    const check = () => set_is_dark(document.documentElement.classList.contains("dark"));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    return () => observer.disconnect();
-  }, []);
-
-  const tooltip_bg     = is_dark ? "#1e293b" : "#ffffff";
-  const tooltip_border = is_dark ? "#334155" : "#CBD5E1";
-  const tooltip_text   = is_dark ? "#e2e8f0" : "#334155";
-  const label_color    = is_dark ? "#cbd5e1" : "#334155";
+  const colors: Record<string, { bar: string; label: string; bg: string }> = {
+    High:   { bar: "bg-[#E00420]", label: "text-red-700 dark:text-red-300",     bg: "bg-red-50 dark:bg-red-500/10" },
+    Medium: { bar: "bg-[#FFCF00]", label: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-500/10" },
+    Low:    { bar: "bg-[#00884A]", label: "text-emerald-700 dark:text-emerald-300", bg: "bg-emerald-50 dark:bg-emerald-500/10" },
+  };
 
   return (
-    <div className="h-72 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            cx="50%"
-            cy="50%"
-            outerRadius={100}
-            label={({ name, value }) => `${name}: ${value}`}
-            labelLine={{ stroke: label_color }}
-          >
-            {data.map((entry) => (
-              <Cell key={entry.name} fill={color_map[entry.name.toLowerCase()] ?? "#94a3b8"} />
-            ))}
-          </Pie>
-          <Tooltip
-            contentStyle={{ borderRadius: 8, border: `1px solid ${tooltip_border}`, fontSize: 12, background: tooltip_bg }}
-            labelStyle={{ color: tooltip_text, fontWeight: 600 }}
+    <div className="space-y-3 py-2">
+      {/* Stacked bar */}
+      <div className="flex h-6 w-full overflow-hidden rounded-lg">
+        {data.filter(d => d.value > 0).map(d => (
+          <div
+            key={d.name}
+            className={`${colors[d.name]?.bar ?? "bg-slate-400"} h-full transition-all`}
+            style={{ width: `${(d.value / total) * 100}%` }}
+            title={`${d.name}: ${d.value}`}
           />
-        </PieChart>
-      </ResponsiveContainer>
+        ))}
+      </div>
+      {/* Legend rows */}
+      <div className="space-y-2">
+        {data.map(d => {
+          const pct = total > 0 ? Math.round((d.value / total) * 100) : 0;
+          const c = colors[d.name] ?? { bar: "bg-slate-400", label: "text-text_dark", bg: "bg-slate-50" };
+          return (
+            <div key={d.name} className={`flex items-center justify-between rounded-lg px-3 py-2 ${c.bg}`}>
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-sm ${c.bar}`} />
+                <span className={`text-sm font-medium ${c.label}`}>{d.name}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold tabular-nums ${c.label}`}>{d.value}</span>
+                <span className="text-xs text-text_medium w-8 text-right">{pct}%</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
