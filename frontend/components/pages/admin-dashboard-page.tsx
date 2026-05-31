@@ -151,9 +151,10 @@ export function AdminDashboardPage() {
     { label: "DB", ms: timing.db_ms ?? 0, color: "bg-success_green" },
   ] : null;
 
-  // Sparkline: findings count over last 5 scans (4)
+  // Sparkline: only show if there's actual variation
   const sparkline_data = (stats.recent_scans ?? []).slice(0, 5).reverse().map(s => s.findings_count);
   const sparkline_max = Math.max(...sparkline_data, 1);
+  const show_sparkline = sparkline_data.length > 1 && Math.min(...sparkline_data) !== sparkline_max;
 
   // Compliance status for action required card
   const all_clear = (stats.pending_reviews_total ?? 0) === 0
@@ -209,7 +210,7 @@ export function AdminDashboardPage() {
 
       {/* Row 1 — scan coverage */}
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Scan coverage</p>
+        <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Scan coverage</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard icon={HardDrive} label="Total files scanned" value={format_number(stats.total_files_scanned)} />
           <KpiCard icon={Server} label="Total data volume" value={format_bytes(stats.total_size_bytes)} />
@@ -217,8 +218,8 @@ export function AdminDashboardPage() {
           <Card className="flex h-full min-h-[122px] flex-col p-3.5">
             <div className="mb-2 flex items-start justify-between">
               <p className="text-[11px] uppercase tracking-wide text-text_medium">Files with PII findings</p>
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
-                <FileSearch className="h-4 w-4 text-bosch_blue" />
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border_grey bg-slate-50 dark:bg-slate-700/50">
+                <FileSearch className="h-4 w-4 text-text_medium" />
               </span>
             </div>
             <div className="mt-auto flex items-end justify-between gap-2">
@@ -228,14 +229,14 @@ export function AdminDashboardPage() {
                 </p>
                 <p className="mt-1 text-xs text-text_medium">{stats.total_findings} entities detected</p>
               </div>
-              {/* Sparkline */}
-              {sparkline_data.length > 1 && (
+              {/* Sparkline — only when trend varies */}
+              {show_sparkline && (
                 <div className="flex items-end gap-0.5 pb-0.5" title="Findings trend (last 5 scans)">
                   {sparkline_data.map((v, i) => (
                     <div
                       key={i}
-                      className="w-2 rounded-sm bg-bosch_blue/60"
-                      style={{ height: `${Math.max(4, (v / sparkline_max) * 32)}px` }}
+                      className="w-1.5 rounded-sm bg-slate-300 dark:bg-slate-600"
+                      style={{ height: `${Math.max(4, (v / sparkline_max) * 28)}px` }}
                     />
                   ))}
                 </div>
@@ -248,7 +249,7 @@ export function AdminDashboardPage() {
 
       {/* Row 2 — accuracy */}
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Scan accuracy</p>
+        <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Scan accuracy</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · delta ~76× faster with cache" />
           <KpiCard icon={CheckCircle} label="Detection precision" value={`${stats.precision_pct}%`} subtitle={`F1: ${stats.f1_score} · balance of precision & recall`} value_class_name="text-success_green" />
@@ -267,7 +268,7 @@ export function AdminDashboardPage() {
 
       {/* Row 3 — resource intensity */}
       <div>
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Resource intensity</p>
+        <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Resource intensity</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
           <KpiCard icon={Cpu} label="CPU load" value={cpu_pct !== null ? `${cpu_pct}%` : "—"} subtitle="during last scan" value_class_name={cpu_pct !== null && cpu_pct > 80 ? "text-bosch_red" : undefined} />
