@@ -1004,11 +1004,31 @@ async def upload_and_scan(
             except Exception as exc:
                 logger.warning("upload re-assign failed: %s", exc)
 
-    threading.Thread(target=_bg, daemon=True).start()
-    return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_names)}
+        # Delete uploaded files from disk and DB after scan — they are
+        # ad-hoc and should not accumulate in the permanent data store.
+        try:
+            from db.session import SessionLocal
+            import sqlalchemy as _sa
+            s = SessionLocal()
+            for name in saved_names:
+                virtual_path = f"/data/uploads/{name}"
+                file_row = s.execute(
+                    select(File).where(File.path == virtual_path)
+                ).scalar_one_or_none()
+                if file_row:
+                    # Keep findings (re-assigned to user) but disassociate from uploads path
+                    file_row.path = f"/data/uploads/archived/{name}"
+                # Delete physical file
+                from pathlib import Path as _CleanPath
+                physical = _CleanPath(get_settings().data_root_path) / "uploads" / name
+                physical.unlink(missing_ok=True)
+            s.commit()
+            s.close()
+        except Exception as exc:
+            logger.warning("upload cleanup failed: %s", exc)
 
     threading.Thread(target=_bg, daemon=True).start()
-    return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_paths)}
+    return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_names)}
 
 
 # ---------------------------------------------------------------------------
