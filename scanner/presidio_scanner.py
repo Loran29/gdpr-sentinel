@@ -113,14 +113,50 @@ def _get_analyzer():
 
 
 # ---------------------------------------------------------------------------
+# Lightweight language detection (no extra dependency)
+# ---------------------------------------------------------------------------
+
+# Frequent German function words + endings. Their presence is a strong signal
+# the document is German, so we should run the German spaCy engine rather than
+# the English one (which mis-handles German names/locations).
+_GERMAN_MARKERS = (
+    " der ", " die ", " das ", " und ", " mit ", " von ", " für ", " ist ",
+    " nicht ", " sich ", " wird ", " den ", " dem ", " ein ", " eine ", " auf ",
+    " bei ", " auch ", " werden ", " sehr ", " geehrte ", " herr ", " frau ",
+    "ä", "ö", "ü", "ß", "Geburtsdatum", "Krankenversicherung", "Anschrift",
+    "Personalnummer", "Abteilung", "Datum", "Unterschrift",
+)
+
+
+def detect_language(text: str) -> str:
+    """Return 'de' if the text looks German, else 'en'. Cheap, deterministic.
+
+    Counts German marker hits in the (lowercased, padded) text. A handful of
+    hits is enough — German docs trip many markers; English docs trip ~none.
+    """
+    if not text:
+        return "en"
+    sample = (" " + text[:3000].lower() + " ")
+    hits = sum(sample.count(m.lower()) for m in _GERMAN_MARKERS)
+    return "de" if hits >= 3 else "en"
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
-def analyze(text: str, language: str = "en") -> list[PresidioEntity]:
-    """Run Presidio + custom regexes over `text`. Returns deduplicated entities."""
+def analyze(text: str, language: str = "auto") -> list[PresidioEntity]:
+    """Run Presidio + custom regexes over `text`. Returns deduplicated entities.
+
+    `language="auto"` (default) detects EN vs DE per-document and routes to the
+    matching spaCy engine. Pass "en"/"de" explicitly to override.
+    """
     if not text or not text.strip():
         return []
+
+    if language == "auto":
+        language = detect_language(text)
 
     out: list[PresidioEntity] = []
 
@@ -138,11 +174,16 @@ def analyze(text: str, language: str = "en") -> list[PresidioEntity]:
                 )
             )
 
-    # 2. Presidio NER — best-effort.
+    # 2. Presidio NER — best-effort. Falls back to English if the chosen
+    #    language engine is unavailable for any reason.
     analyzer = _get_analyzer()
     if analyzer is not None:
         try:
-            results = analyzer.analyze(text=text, language=language)
+            try:
+                results = analyzer.analyze(text=text, language=language)
+            except ValueError:
+                # Requested language not loaded in the registry — fall back to EN.
+                results = analyzer.analyze(text=text, language="en")
             for r in results:
                 # Per-type confidence thresholds.
                 # Phone numbers score lower by design in Presidio — use a relaxed floor.

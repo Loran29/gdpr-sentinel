@@ -499,23 +499,32 @@ def _run_scan(
         if scan_row is not None:
             scan_row.progress_files_total = files_skipped + len(work_items)
 
+    # Progress is tracked in-process and flushed to the DB in ONE coalesced
+    # session per file (after the scan), instead of two separate open/commit
+    # cycles before and after. Same data reaches the polling endpoint, but we
+    # halve the progress-write round-trips and drop the pre-scan lock contention
+    # that serialised the worker threads. Pure speed change — no finding data is
+    # touched, so result_hash is unaffected.
     progress_lock = threading.Lock()
+    # Seed with files already counted as completed by the delta-skip path above,
+    # so the absolute-set below continues from the right number.
+    progress_state = {"completed": files_skipped, "current_file": None}
 
     def _process(item: tuple[FileMeta, bytes, str]) -> Optional[dict]:
         fm, data, sha = item
-        with progress_lock:
-            with session_scope() as s:
-                scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
-                if scan_row is not None:
-                    scan_row.progress_current_file = fm.name
 
         result = _scan_one_file(connector, fm, data, sha, scan_id, mod_routing)
 
         with progress_lock:
+            progress_state["completed"] += 1
+            progress_state["current_file"] = fm.name
+            completed_now = progress_state["completed"]
+            current_now = progress_state["current_file"]
             with session_scope() as s:
                 scan_row = s.execute(select(Scan).where(Scan.id == scan_id)).scalar_one_or_none()
                 if scan_row is not None:
-                    scan_row.progress_files_completed += 1
+                    scan_row.progress_files_completed = completed_now
+                    scan_row.progress_current_file = current_now
 
         return result
 

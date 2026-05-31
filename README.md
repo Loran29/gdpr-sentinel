@@ -91,9 +91,9 @@ Runs two full scans over 27 PDFs, computes P/R/F1 against `eval/ground_truth.csv
 
 | Metric | Value |
 |--------|-------|
-| Precision | 92.4% |
+| Precision | 94.2% |
 | Recall | 96.0% |
-| F1 | **0.942** |
+| F1 | **0.951** |
 | Document type accuracy | **91.7%** |
 | Reproducibility | **PASS** (identical `result_hash` across runs) |
 | Scan cold (parallel) | ~39s / 27 files |
@@ -143,6 +143,7 @@ python scripts/generate_extra_pdfs.py # regenerate 4 additional test PDFs
 ## Key design decisions
 
 - **Reproducibility hash** — covers only deterministic (presidio/regex) entities; LLM extras excluded since OpenRouter proxies don't honour `seed`
+- **Per-document language routing** — a cheap deterministic detector picks EN vs DE per file and runs the matching spaCy engine, so German documents (Krankmeldung, SEPA mandates) are analysed by `de_core_news_lg` instead of the English model (+PERSON_NAME precision)
 - **Contextual entity filters** — FINANCIAL_AMOUNT requires co-occurring PERSON_NAME; DEPARTMENT same; SYSTEM_IDENTIFIER single-word alpha dropped; GERMAN_VAT_ID enforces `DE\d{9}` format
 - **Surname dedup** — honorific variants ("Dr. Ingrid Haller" + "Ingrid Haller") collapsed to longest form
 - **Document year extraction** — retention deadline uses earliest 4-digit year in document text, not scan date
