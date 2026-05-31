@@ -1103,11 +1103,15 @@ async def upload_and_scan(
 
     from scanner.pipeline import reserve_scan_id, run_full_scan as _run_full_scan
 
-    scan_id = reserve_scan_id("full", source_id="src_local_data")
+    scan_id = reserve_scan_id("full", source_id="src_upload")
 
     def _bg():
-        connector = LocalFolderConnector(root=str(get_settings().data_root_path), include_uploads=True)
-        _run_full_scan(connector, source_id="src_local_data", scan_id=scan_id)
+        # Scan ONLY the uploads folder — not the full data directory
+        upload_connector = LocalFolderConnector(
+            root=str(upload_dir),
+            include_uploads=True,
+        )
+        _run_full_scan(upload_connector, source_id="src_upload", scan_id=scan_id)
 
         # Re-assign findings for uploaded files to the chosen user.
         if assign_to_user_id:
@@ -1115,7 +1119,8 @@ async def upload_and_scan(
                 from db.session import SessionLocal
                 s = SessionLocal()
                 for name in saved_names:
-                    virtual_path = f"/data/uploads/{name}"
+                    # When root=upload_dir, _normalize produces /data/{name}
+                    virtual_path = f"/data/{name}"
                     file_row = s.execute(
                         select(File).where(File.path == virtual_path)
                     ).scalar_one_or_none()
