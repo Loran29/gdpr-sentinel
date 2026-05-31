@@ -13,8 +13,12 @@ from core.config import get_settings
 
 
 class LocalFolderConnector(Connector):
-    def __init__(self, root: Path | str, mod_yaml: Path | str | None = None) -> None:
+    # Subfolders excluded from main scans — used for ad-hoc uploads only.
+    _EXCLUDED_DIRS = {"uploads"}
+
+    def __init__(self, root: Path | str, mod_yaml: Path | str | None = None, include_uploads: bool = False) -> None:
         self.root = Path(root).resolve()
+        self._include_uploads = include_uploads
         if mod_yaml is None:
             mod_yaml = get_settings().master_of_data_config
         self._direct_patterns: list[tuple[str, str]] = []
@@ -33,6 +37,10 @@ class LocalFolderConnector(Connector):
                 continue
             if p.suffix.lower() not in (".pdf", ".docx"):
                 continue
+            # Skip excluded dirs unless explicitly included (upload scans)
+            if not self._include_uploads:
+                if any(part in self._EXCLUDED_DIRS for part in p.parts):
+                    continue
             stat = p.stat()
             mt, _ = mimetypes.guess_type(p.name)
             out.append(

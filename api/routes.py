@@ -964,7 +964,7 @@ async def upload_and_scan(
     scan_id = reserve_scan_id("full", source_id="src_local_data")
 
     def _bg():
-        connector = LocalFolderConnector(root=str(get_settings().data_root_path))
+        connector = LocalFolderConnector(root=str(get_settings().data_root_path), include_uploads=True)
         _run_full_scan(connector, source_id="src_local_data", scan_id=scan_id)
 
         # Re-assign findings for uploaded files to the chosen user.
