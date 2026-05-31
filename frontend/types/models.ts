@@ -62,7 +62,9 @@ export type Finding = {
     | "pending"
     | "kept_business_need"
     | "marked_false_positive"
-    | "deleted";
+    | "deleted"
+    | "confirmed_business_need"
+    | "acknowledged_cleanup";
   reviewed_by_user_id: string | null;
   reviewed_at: string | null;
   review_note: string | null;
@@ -137,7 +139,9 @@ export type AuditEntry = {
     | "pending"
     | "kept_business_need"
     | "marked_false_positive"
-    | "deleted";
+    | "deleted"
+    | "confirmed_business_need"
+    | "acknowledged_cleanup";
 };
 
 export type SourceOption = {

@@ -169,7 +169,7 @@ export function UploadScanCard() {
             </Select>
             {assign_to && (
               <p className="text-xs text-text_medium">
-                Findings will appear in <span className="font-medium text-text_dark">{assigned_user?.name}</span>'s review queue after scanning.
+                Findings will appear in <span className="font-medium text-text_dark">{assigned_user?.name}</span>&apos;s review queue after scanning.
               </p>
             )}
           </div>
