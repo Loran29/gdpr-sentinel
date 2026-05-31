@@ -597,15 +597,14 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
     # which includes stale rows from old upload scans.
     total_files = files_processed_last
 
-    # Total size and findings from files touched by the last scan.
+    # Total data volume of the files the LAST scan actually touched — so it stays
+    # coherent with total_files_scanned (which is the last scan's file count).
+    # Files scanned in this run have last_scanned_at >= the scan's start; summing
+    # over the whole table would mix in files from other scans/scopes.
     if last_scan:
-        last_scan_findings = db.execute(
-            select(Finding).where(Finding.scan_id == last_scan.id)
-        ).scalars().all()
-        last_scan_file_ids = {f.file_id for f in last_scan_findings}
-        # Also include files scanned but with no findings
         total_size = db.execute(
             select(func.coalesce(func.sum(File.size_bytes), 0))
+            .where(File.last_scanned_at >= last_scan.started_at)
         ).scalar_one()
     else:
         total_size = 0

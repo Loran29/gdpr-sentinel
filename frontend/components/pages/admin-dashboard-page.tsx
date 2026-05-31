@@ -319,8 +319,14 @@ export function AdminDashboardPage() {
         <Card className="p-3.5">
           <div className="mb-3 flex items-center justify-between">
             <p className="text-sm font-semibold text-text_dark">Pipeline timing breakdown</p>
-            <p className="text-xs text-text_medium">Last scan · {timing_total.toFixed(0)} ms total</p>
+            <p className="text-xs text-text_medium">
+              Aggregate CPU across workers · {timing_total.toFixed(0)} ms
+              {last_duration ? ` · ${last_duration.toFixed(1)}s wall-clock` : ""}
+            </p>
           </div>
+          <p className="-mt-2 mb-2 text-[11px] text-text_medium">
+            Share of processing time per stage (summed across parallel workers, so it exceeds wall-clock).
+          </p>
           <div className="flex h-6 w-full overflow-hidden rounded-lg">
             {timing_bars.map(({ label, ms, color }) => (
               <div
