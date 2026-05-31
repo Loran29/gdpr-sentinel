@@ -17,6 +17,14 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./gdpr_sentinel.db"
 
+    delta_scan_interval_minutes: int = 0
+
+    # Azure AD / Microsoft Graph OAuth
+    azure_client_id: str = ""
+    azure_client_secret: str = ""
+    azure_tenant_id: str = "common"
+    azure_redirect_uri: str = "http://localhost:8000/auth/callback"
+
     @property
     def data_root_path(self) -> Path:
         return Path(self.data_root).resolve()
@@ -24,6 +32,10 @@ class Settings(BaseSettings):
     @property
     def has_llm(self) -> bool:
         return bool(self.openrouter_api_key.strip())
+
+    @property
+    def has_azure(self) -> bool:
+        return bool(self.azure_client_id.strip() and self.azure_client_secret.strip())
 
 
 @lru_cache(maxsize=1)

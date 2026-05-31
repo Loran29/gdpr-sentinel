@@ -15,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.errors import register_error_handlers
 from api.routes import router
+from api.auth import auth_router
+from core.scheduler import start as start_scheduler, stop as stop_scheduler
 from db.session import init_db
 
 logging.basicConfig(
@@ -29,9 +31,12 @@ _SERVER_START = time.perf_counter()
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # noqa: ARG001
     init_db()
+    from core.config import get_settings
     from scanner.presidio_scanner import _get_analyzer
     _get_analyzer()  # warm up spaCy models so first scan request is not slow
+    start_scheduler(get_settings().delta_scan_interval_minutes)
     yield
+    stop_scheduler()
 
 
 app = FastAPI(
@@ -52,3 +57,4 @@ app.add_middleware(
 
 register_error_handlers(app)
 app.include_router(router)
+app.include_router(auth_router)

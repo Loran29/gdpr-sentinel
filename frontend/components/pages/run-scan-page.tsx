@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Play, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Cloud, CloudOff, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { use_app_state } from "@/context/app-state";
 import { get_scan, run_delta_scan, run_full_scan } from "@/src/lib/api-client";
 import { Scan } from "@/types/models";
 import { UploadScanCard } from "@/components/upload-scan-card";
+
+const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export function RunScanPage() {
   const { append_scan } = use_app_state();
@@ -218,6 +220,8 @@ export function RunScanPage() {
       )}
 
       <UploadScanCard />
+
+      <OneDriveCard />
     </div>
   );
 }
@@ -228,5 +232,112 @@ function Metric({ label, value, monospace }: { label: string; value: string; mon
       <p className="text-[11px] uppercase tracking-wide text-text_medium">{label}</p>
       <p className={`${monospace ? "font-mono text-[13px]" : "text-sm"} mt-1 break-all text-text_dark`}>{value}</p>
     </div>
+  );
+}
+
+function OneDriveCard() {
+  const [status, set_status] = useState<{ connected: boolean; user_name: string | null; user_email: string | null; azure_configured: boolean } | null>(null);
+  const [scanning, set_scanning] = useState(false);
+  const [progress, set_progress] = useState(0);
+  const [done, set_done] = useState(false);
+  const poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("onedrive") === "connected") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    fetch(`${API_BASE}/auth/status`).then(r => r.json()).then(set_status).catch(() => {});
+  }, []);
+
+  const connect = () => { window.location.href = `${API_BASE}/auth/microsoft`; };
+
+  const disconnect = async () => {
+    await fetch(`${API_BASE}/auth/logout`, { method: "POST" });
+    set_status(s => s ? { ...s, connected: false, user_name: null, user_email: null } : null);
+    set_done(false);
+  };
+
+  const start_scan = async () => {
+    set_scanning(true); set_progress(0); set_done(false);
+    const resp = await fetch(`${API_BASE}/auth/onedrive/scan`, { method: "POST" });
+    const data = await resp.json();
+    if (data.error) { set_scanning(false); return; }
+    poll_ref.current = setInterval(async () => {
+      const scan = await get_scan(data.scan_id) as any;
+      if (!scan || scan.status === "running") {
+        if (scan?.progress) set_progress(scan.progress.percent ?? 0);
+        return;
+      }
+      clearInterval(poll_ref.current!);
+      set_progress(100); set_scanning(false); set_done(true);
+    }, 1000);
+  };
+
+  if (!status) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Cloud className="h-4 w-4 text-bosch_blue" />
+          OneDrive connector
+        </CardTitle>
+        <p className="text-xs text-text_medium">
+          Connect your Microsoft account to scan files directly from OneDrive.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {!status.azure_configured ? (
+          <p className="text-sm text-text_medium">Azure credentials not configured in .env</p>
+        ) : !status.connected ? (
+          <button
+            onClick={connect}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#0078D4] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#006cbd]"
+          >
+            <ExternalLink className="h-4 w-4" />
+            Sign in with Microsoft
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg border border-border_grey bg-emerald-50/50 px-3 py-2.5 dark:bg-emerald-500/5">
+              <div>
+                <p className="text-sm font-medium text-text_dark">{status.user_name}</p>
+                <p className="text-xs text-text_medium">{status.user_email}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Connected
+                </span>
+                <button onClick={disconnect} className="text-xs text-text_medium underline hover:text-text_dark">
+                  Disconnect
+                </button>
+              </div>
+            </div>
+            {scanning && (
+              <div className="space-y-1.5">
+                <Progress value={progress} />
+                <p className="text-xs text-text_medium">{progress}% — scanning OneDrive...</p>
+              </div>
+            )}
+            {done && (
+              <p className="text-sm font-medium text-emerald-600">
+                Scan complete — check findings in your review queue.
+              </p>
+            )}
+            {!scanning && !done && (
+              <button
+                onClick={start_scan}
+                className="inline-flex items-center gap-2 rounded-lg bg-bosch_red px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-bosch_red/90"
+              >
+                <Play className="h-4 w-4" />
+                Scan my OneDrive
+              </button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

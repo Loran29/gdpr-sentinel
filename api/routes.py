@@ -45,6 +45,8 @@ from api.schemas import (
     ScanProgress,
     ScanRunRequest,
     ScanRunResponse,
+    SchedulerConfigIn,
+    SchedulerConfigOut,
     StageTiming,
     UserOut,
 )
@@ -1333,3 +1335,23 @@ def retention_notify(
             _log.info("[NOTIFY] Sending notification to %s about %s", owner_email, fl.name)
 
     return RetentionNotifyResult(dry_run=body.dry_run, notified=notified, total=len(notified))
+
+
+# ---------------------------------------------------------------------------
+# Scheduler config
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/scheduler", response_model=SchedulerConfigOut, tags=["Admin"])
+def get_scheduler_config() -> SchedulerConfigOut:
+    from core import scheduler
+    state = scheduler.get_state()
+    return SchedulerConfigOut(**state)
+
+
+@router.post("/admin/scheduler", response_model=SchedulerConfigOut, tags=["Admin"])
+def set_scheduler_config(body: SchedulerConfigIn) -> SchedulerConfigOut:
+    from core import scheduler
+    scheduler.reconfigure(body.interval_minutes)
+    state = scheduler.get_state()
+    return SchedulerConfigOut(**state)
