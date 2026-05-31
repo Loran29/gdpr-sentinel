@@ -932,36 +932,68 @@ def file_preview(file_id: str = Path(...), db: Session = Depends(get_db)) -> Res
 @router.post("/upload/scan", tags=["Files"])
 async def upload_and_scan(
     files: list[UploadFile] = FastAPIFile(...),
+    assign_to_user_id: Optional[str] = Query(default=None, description="Assign findings to this user ID"),
     x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
     db: Session = Depends(get_db),
 ) -> dict:
-    """Accept one or more PDF uploads, save to data/uploads/, scan immediately."""
-    import uuid as _uuid
-    from pathlib import Path as _Path
+    """Accept one or more PDF/DOCX uploads, save to data/uploads/, scan immediately.
+
+    If assign_to_user_id is provided, findings from uploaded files are reassigned
+    to that user so they appear in their review queue.
+    """
     import threading
+    from pathlib import Path as _Path
 
     upload_dir = _Path(get_settings().data_root_path) / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    saved_paths = []
+    saved_names = []
     for upload in files:
         if not (upload.filename or "").lower().endswith((".pdf", ".docx")):
             continue
         safe_name = _re.sub(r"[^\w\-.]", "_", upload.filename or "upload.pdf")
         dest = upload_dir / safe_name
         dest.write_bytes(await upload.read())
-        saved_paths.append(str(dest))
+        saved_names.append(safe_name)
 
-    if not saved_paths:
-        return {"error": "No valid PDF files received"}
+    if not saved_names:
+        return {"error": "No valid PDF or DOCX files received"}
 
     from scanner.pipeline import reserve_scan_id, run_full_scan as _run_full_scan
 
-    scan_id = reserve_scan_id("full", source_id="src_upload")
+    scan_id = reserve_scan_id("full", source_id="src_local_data")
 
     def _bg():
-        connector = LocalFolderConnector(root=str(upload_dir))
-        _run_full_scan(connector, source_id="src_upload", scan_id=scan_id)
+        connector = LocalFolderConnector(root=str(get_settings().data_root_path))
+        _run_full_scan(connector, source_id="src_local_data", scan_id=scan_id)
+
+        # Re-assign findings for uploaded files to the chosen user.
+        if assign_to_user_id:
+            try:
+                from db.session import SessionLocal
+                s = SessionLocal()
+                for name in saved_names:
+                    virtual_path = f"/data/uploads/{name}"
+                    file_row = s.execute(
+                        select(File).where(File.path == virtual_path)
+                    ).scalar_one_or_none()
+                    if file_row is None:
+                        continue
+                    file_row.owner_user_id = assign_to_user_id
+                    findings = s.execute(
+                        select(Finding).where(Finding.file_id == file_row.id)
+                    ).scalars().all()
+                    for f in findings:
+                        f.owner_user_id = assign_to_user_id
+                        f.master_of_data_id = None
+                        f.owner_type = "direct"
+                s.commit()
+                s.close()
+            except Exception as exc:
+                logger.warning("upload re-assign failed: %s", exc)
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_names)}
 
     threading.Thread(target=_bg, daemon=True).start()
     return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_paths)}
