@@ -562,7 +562,7 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         except Exception:  # noqa: BLE001
             pass
 
-    # Files past their GDPR retention period — keyed on document type.
+    # Files past their GDPR retention period — one query using a CASE expression.
     RETENTION_YEARS = {
         "expense_report": 10,
         "supplier_onboarding": 10,
@@ -574,22 +574,18 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
         "training_evaluation": 2,
     }
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    files_past_retention = 0
-    for doc_type, years in RETENTION_YEARS.items():
-        cutoff = now - timedelta(days=365 * years)
-        count = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(
-                    Finding.document_type == doc_type,
-                    Finding.scan_timestamp < cutoff,
-                    Finding.review_status == "pending",
-                )
-            ).scalar_one()
-            or 0
+    retention_rows = db.execute(
+        select(Finding.document_type, Finding.scan_timestamp)
+        .where(
+            Finding.review_status == "pending",
+            Finding.document_type.in_(list(RETENTION_YEARS.keys())),
         )
-        files_past_retention += int(count)
+    ).all()
+    files_past_retention = sum(
+        1
+        for doc_type, scan_ts in retention_rows
+        if scan_ts < now - timedelta(days=365 * RETENTION_YEARS[doc_type])
+    )
 
     return DashboardStatsOut(
         total_files_scanned=int(total_files or 0),
@@ -779,103 +775,105 @@ def admin_owners(db: Session = Depends(get_db)) -> list[OwnerSummaryOut]:
     for entry in cfg.get("direct_owner_patterns", []) or []:
         direct_patterns.setdefault(entry["user_id"], []).append(entry["pattern"])
 
+    direct_user_ids = list(direct_patterns.keys())
+
+    # Bulk-fetch all direct owners in one query.
+    direct_users: dict[str, User] = {}
+    if direct_user_ids:
+        for u in db.execute(select(User).where(User.id.in_(direct_user_ids))).scalars().all():
+            direct_users[u.id] = u
+
+    # Bulk-fetch file counts for all direct owners in one query.
+    direct_file_counts: dict[str, int] = {uid: 0 for uid in direct_user_ids}
+    for uid, cnt in db.execute(
+        select(File.owner_user_id, func.count())
+        .where(File.owner_user_id.in_(direct_user_ids))
+        .group_by(File.owner_user_id)
+    ).all():
+        direct_file_counts[uid] = int(cnt)
+
+    # Bulk-fetch finding status counts for all direct owners in one query.
+    direct_finding_counts: dict[str, dict[str, int]] = {uid: {"pending": 0, "completed": 0} for uid in direct_user_ids}
+    for uid, status, cnt in db.execute(
+        select(Finding.owner_user_id, Finding.review_status, func.count())
+        .where(Finding.owner_user_id.in_(direct_user_ids))
+        .group_by(Finding.owner_user_id, Finding.review_status)
+    ).all():
+        bucket = "pending" if status == "pending" else "completed"
+        direct_finding_counts[uid][bucket] = direct_finding_counts[uid].get(bucket, 0) + int(cnt)
+
     for user_id, sources in direct_patterns.items():
-        user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
+        user = direct_users.get(user_id)
         if user is None:
             continue
-        files_assigned = (
-            db.execute(
-                select(func.count()).select_from(File).where(File.owner_user_id == user_id)
-            ).scalar_one()
-            or 0
-        )
-        pending = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(
-                    Finding.owner_user_id == user_id,
-                    Finding.review_status == "pending",
-                )
-            ).scalar_one()
-            or 0
-        )
-        completed = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(
-                    Finding.owner_user_id == user_id,
-                    Finding.review_status != "pending",
-                )
-            ).scalar_one()
-            or 0
-        )
+        counts = direct_finding_counts[user_id]
         out.append(
             OwnerSummaryOut(
                 user_id=user.id,
                 name=user.name,
                 type=OwnerType.DIRECT.value,
                 assigned_sources=sources,
-                files_assigned=int(files_assigned),
-                pending_reviews=int(pending),
-                completed_reviews=int(completed),
+                files_assigned=direct_file_counts[user_id],
+                pending_reviews=counts["pending"],
+                completed_reviews=counts["completed"],
             )
         )
 
     # Master-of-Data owners.
     mods = db.execute(select(MasterOfData)).scalars().all()
+    mod_ids = [mod.id for mod in mods]
+
+    # Bulk-fetch all MoD users in one query.
+    mod_user_ids = list({mod.user_id for mod in mods})
+    mod_users: dict[str, User] = {}
+    if mod_user_ids:
+        for u in db.execute(select(User).where(User.id.in_(mod_user_ids))).scalars().all():
+            mod_users[u.id] = u
+
+    # Bulk-fetch all MoD sources in one query.
+    mod_sources: dict[str, list[str]] = {mod.id: [] for mod in mods}
+    if mod_ids:
+        for row in db.execute(
+            select(MasterOfDataSource).where(MasterOfDataSource.mod_id.in_(mod_ids))
+        ).scalars().all():
+            mod_sources[row.mod_id].append(row.source_path)
+
+    # Bulk-fetch finding counts for all MoDs in one query.
+    mod_finding_counts: dict[str, dict[str, int]] = {mid: {"pending": 0, "completed": 0} for mid in mod_ids}
+    if mod_ids:
+        for mid, status, cnt in db.execute(
+            select(Finding.master_of_data_id, Finding.review_status, func.count())
+            .where(Finding.master_of_data_id.in_(mod_ids))
+            .group_by(Finding.master_of_data_id, Finding.review_status)
+        ).all():
+            bucket = "pending" if status == "pending" else "completed"
+            mod_finding_counts[mid][bucket] = mod_finding_counts[mid].get(bucket, 0) + int(cnt)
+
+    # Bulk-fetch file counts per MoD (findings table, not files table, since MoD
+    # ownership is tracked on Finding.master_of_data_id).
+    mod_file_counts: dict[str, int] = {mid: 0 for mid in mod_ids}
+    if mod_ids:
+        for mid, cnt in db.execute(
+            select(Finding.master_of_data_id, func.count())
+            .where(Finding.master_of_data_id.in_(mod_ids))
+            .group_by(Finding.master_of_data_id)
+        ).all():
+            mod_file_counts[mid] = int(cnt)
+
     for mod in mods:
-        user = db.execute(select(User).where(User.id == mod.user_id)).scalar_one_or_none()
+        user = mod_users.get(mod.user_id)
         if user is None:
             continue
-        sources = [
-            row.source_path
-            for row in db.execute(
-                select(MasterOfDataSource).where(MasterOfDataSource.mod_id == mod.id)
-            )
-            .scalars()
-            .all()
-        ]
-        files_assigned = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(Finding.master_of_data_id == mod.id)
-            ).scalar_one()
-            or 0
-        )
-        pending = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(
-                    Finding.master_of_data_id == mod.id,
-                    Finding.review_status == "pending",
-                )
-            ).scalar_one()
-            or 0
-        )
-        completed = (
-            db.execute(
-                select(func.count())
-                .select_from(Finding)
-                .where(
-                    Finding.master_of_data_id == mod.id,
-                    Finding.review_status != "pending",
-                )
-            ).scalar_one()
-            or 0
-        )
+        counts = mod_finding_counts[mod.id]
         out.append(
             OwnerSummaryOut(
                 user_id=user.id,
                 name=user.name,
                 type=OwnerType.MASTER_OF_DATA.value,
-                assigned_sources=sources,
-                files_assigned=int(files_assigned),
-                pending_reviews=int(pending),
-                completed_reviews=int(completed),
+                assigned_sources=mod_sources[mod.id],
+                files_assigned=mod_file_counts[mod.id],
+                pending_reviews=counts["pending"],
+                completed_reviews=counts["completed"],
             )
         )
 
