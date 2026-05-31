@@ -12,7 +12,6 @@ import {
   HardDrive,
   Link2,
   MemoryStick,
-  RefreshCw,
   Server,
   Zap
 } from "lucide-react";
@@ -26,9 +25,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { dashboard_stats, reproducibility_snapshot, resource_intensity } from "@/lib/mock-data";
 import { format_bytes, format_number, format_timestamp } from "@/lib/utils";
-import { get_admin_dashboard, get_resource_health, get_scan, get_scheduler_config, run_full_scan, run_delta_scan, set_scheduler_config } from "@/src/lib/api-client";
+import { get_admin_dashboard, get_resource_health, get_scan, run_full_scan, run_delta_scan } from "@/src/lib/api-client";
 import { DashboardStats } from "@/types/models";
-import { SchedulerConfig } from "@/src/lib/api-types";
 import { use_app_state } from "@/context/app-state";
 
 export function AdminDashboardPage() {
@@ -42,27 +40,14 @@ export function AdminDashboardPage() {
   const [scan_elapsed, set_scan_elapsed] = useState(0);
   const poll_ref = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [scheduler, set_scheduler] = useState<SchedulerConfig>({ interval_minutes: 0, running: false, next_run_at: null });
-  const [sched_value, set_sched_value] = useState("1");
-  const [sched_unit, set_sched_unit] = useState<"days" | "weeks" | "months">("days");
-  const [sched_saving, set_sched_saving] = useState(false);
-
   const load_stats = useCallback(async () => {
-    const [resolved_stats, health, sched] = await Promise.all([
+    const [resolved_stats, health] = await Promise.all([
       get_admin_dashboard(),
       get_resource_health(),
-      get_scheduler_config(),
     ]);
     set_stats(resolved_stats);
     set_ram_mb(health.memory_peak_mb);
     set_cpu_pct(health.cpu_load_pct);
-    set_scheduler(sched);
-    if (sched.interval_minutes > 0) {
-      const mins = sched.interval_minutes;
-      if (mins % (30 * 24 * 60) === 0) { set_sched_value(String(mins / (30 * 24 * 60))); set_sched_unit("months"); }
-      else if (mins % (7 * 24 * 60) === 0) { set_sched_value(String(mins / (7 * 24 * 60))); set_sched_unit("weeks"); }
-      else { set_sched_value(String(Math.round(mins / (24 * 60)))); set_sched_unit("days"); }
-    }
   }, []);
 
   useEffect(() => {
@@ -112,22 +97,6 @@ export function AdminDashboardPage() {
 
   useEffect(() => () => stop_poll(), [stop_poll]);
 
-  const unit_to_minutes = (val: number, unit: "days" | "weeks" | "months") => {
-    if (unit === "weeks") return val * 7 * 24 * 60;
-    if (unit === "months") return val * 30 * 24 * 60;
-    return val * 24 * 60;
-  };
-
-  const save_scheduler = useCallback(async () => {
-    const n = parseInt(sched_value, 10);
-    if (isNaN(n) || n < 0) return;
-    set_sched_saving(true);
-    const minutes = n === 0 ? 0 : unit_to_minutes(n, sched_unit);
-    const result = await set_scheduler_config(minutes);
-    if (result.ok) set_scheduler(result.data);
-    set_sched_saving(false);
-  }, [sched_value, sched_unit]);
-
   const document_type_data = useMemo(
     () => [
       { name: "Expense report", value: stats.findings_by_document_type?.expense_report ?? 0 },
@@ -153,13 +122,33 @@ export function AdminDashboardPage() {
   const last_duration = stats.last_scan_duration_sec;
   const cached_speed = stats.scan_speed_files_per_sec;
 
+  // Stale scan warning — last scan > 24h ago
+  const last_scan_age_h = stats.last_scan_at
+    ? (Date.now() - new Date(stats.last_scan_at).getTime()) / 3600000
+    : null;
+  const is_stale = last_scan_age_h !== null && last_scan_age_h > 24;
+
+  // Timing breakdown for mini-bar (8)
+  const timing = stats.last_scan_timing_breakdown;
+  const timing_total = timing
+    ? (timing.extract_ms ?? 0) + (timing.presidio_ms ?? 0) + (timing.llm_ms ?? 0) + (timing.db_ms ?? 0)
+    : 0;
+  const timing_bars = timing && timing_total > 0 ? [
+    { label: "Extract", ms: timing.extract_ms ?? 0, color: "bg-bosch_blue" },
+    { label: "Presidio", ms: timing.presidio_ms ?? 0, color: "bg-[#7A1FA2]" },
+    { label: "LLM", ms: timing.llm_ms ?? 0, color: "bg-[#E00420]" },
+    { label: "DB", ms: timing.db_ms ?? 0, color: "bg-success_green" },
+  ] : null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text_dark">Admin dashboard</h1>
-          <p className="mt-0.5 text-sm text-text_medium">
-            Last scan {stats.last_scan_at ? format_timestamp(stats.last_scan_at) : "not available"}.
+          <p className={`mt-0.5 text-sm ${is_stale ? "text-amber-600 font-medium" : "text-text_medium"}`}>
+            {stats.last_scan_at
+              ? `${is_stale ? "⚠ " : ""}Last scan ${format_timestamp(stats.last_scan_at)}${is_stale ? " — consider running a new scan" : ""}`
+              : "No scan yet"}
           </p>
         </div>
         <div className="flex gap-2">
@@ -198,21 +187,108 @@ export function AdminDashboardPage() {
         </Card>
       )}
 
-      {/* Row 1 — scan KPIs */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard icon={HardDrive} label="Total files scanned" value={format_number(stats.total_files_scanned)} subtitle="across 3 sources" />
-        <KpiCard icon={Server} label="Total data volume" value={format_bytes(stats.total_size_bytes)} />
-        <KpiCard icon={AlertTriangle} label="Files flagged" value={format_number(stats.files_with_findings)} value_class_name="text-bosch_red" />
-        <KpiCard icon={FileSearch} label="Total findings" value={String(stats.total_findings)} />
+      {/* Row 1 — scan coverage */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Scan coverage</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard icon={HardDrive} label="Total files scanned" value={format_number(stats.total_files_scanned)} />
+          <KpiCard icon={Server} label="Total data volume" value={format_bytes(stats.total_size_bytes)} />
+          <KpiCard icon={AlertTriangle} label="Files flagged" value={format_number(stats.files_with_findings)} value_class_name="text-bosch_red" />
+          <KpiCard icon={FileSearch} label="Total findings" value={String(stats.total_findings)} />
+        </div>
       </div>
 
-      {/* Row 2 — accuracy KPIs */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard icon={Gauge} label="Scan speed" value={`${cached_speed} files/sec`} subtitle={last_duration ? `Last scan: ${last_duration.toFixed(1)}s` : undefined} />
-        <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · cached ~2× faster" />
-        <KpiCard icon={CheckCircle} label="Detection precision" value={`${stats.precision_pct}%`} subtitle={`F1: ${stats.f1_score} · Recall: ${stats.recall_pct}%`} value_class_name="text-success_green" />
-        <KpiCard icon={Activity} label="Recall" value={`${stats.recall_pct}%`} subtitle="% of real PII caught" />
+      {/* Row 2 — accuracy */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Scan accuracy</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard icon={Gauge} label="Scan speed" value={`${cached_speed} files/sec`} subtitle={last_duration ? `Cold: ${last_duration.toFixed(1)}s · Cached: ~2s` : undefined} />
+          <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · delta ~76× faster with cache" />
+          <KpiCard icon={CheckCircle} label="Detection precision" value={`${stats.precision_pct}%`} subtitle={`F1: ${stats.f1_score} · balance of precision & recall`} value_class_name="text-success_green" />
+          <KpiCard icon={Activity} label="Recall" value={`${stats.recall_pct}%`} subtitle="% of real PII caught — higher is safer" />
+        </div>
       </div>
+
+      {/* Row 3 — resource intensity */}
+      <div>
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-text_medium">Resource intensity</p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
+          <KpiCard icon={Cpu} label="CPU load" value={cpu_pct !== null ? `${cpu_pct}%` : "—"} subtitle="during last scan" value_class_name={cpu_pct !== null && cpu_pct > 80 ? "text-bosch_red" : undefined} />
+          {has_retention_card && (
+            <KpiCard
+              icon={AlertTriangle}
+              label="Files past retention"
+              value={String(stats.files_past_retention ?? 0)}
+              subtitle="GDPR Art. 5(1)(e) violations"
+              value_class_name={(stats.files_past_retention ?? 0) > 0 ? "text-bosch_red" : "text-success_green"}
+            />
+          )}
+          {/* Connectors status */}
+          <Card className="flex h-full min-h-[122px] flex-col p-3.5">
+            <div className="mb-2 flex items-start justify-between">
+              <p className="text-[11px] uppercase tracking-wide text-text_medium">Connectors</p>
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
+                <Link2 className="h-4 w-4 text-bosch_blue" />
+              </span>
+            </div>
+            <div className="mt-auto space-y-1">
+              {[
+                { name: "Local folder", active: true },
+                { name: "OneDrive", active: false },
+                { name: "SharePoint", active: false },
+              ].map(({ name, active }) => (
+                <div key={name} className="flex items-center gap-1.5">
+                  <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-success_green" : "bg-slate-300 dark:bg-slate-600"}`} />
+                  <span className={`text-xs ${active ? "font-medium text-text_dark" : "text-text_medium"}`}>{name}</span>
+                  {active && <span className="ml-auto text-[10px] font-semibold text-success_green">ACTIVE</span>}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid gap-3 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <CardHeader><CardTitle>Findings by document type</CardTitle></CardHeader>
+          <CardContent><DocumentTypeBarChart data={document_type_data} /></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Sensitivity distribution</CardTitle></CardHeader>
+          <CardContent><SensitivityChart data={sensitivity_data} /></CardContent>
+        </Card>
+      </div>
+
+      {/* Timing breakdown mini-bar (8) */}
+      {timing_bars && (
+        <Card className="p-3.5">
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-text_dark">Pipeline timing breakdown</p>
+            <p className="text-xs text-text_medium">Last scan · {timing_total.toFixed(0)} ms total</p>
+          </div>
+          <div className="flex h-5 w-full overflow-hidden rounded-full">
+            {timing_bars.map(({ label, ms, color }) => (
+              <div
+                key={label}
+                className={`${color} h-full`}
+                style={{ width: `${(ms / timing_total) * 100}%` }}
+                title={`${label}: ${ms.toFixed(0)}ms`}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+            {timing_bars.map(({ label, ms, color }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <span className={`h-2.5 w-2.5 rounded-sm ${color}`} />
+                <span className="text-xs text-text_medium">{label}</span>
+                <span className="text-xs font-medium text-text_dark">{ms.toFixed(0)}ms</span>
+                <span className="text-xs text-text_medium">({((ms / timing_total) * 100).toFixed(0)}%)</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Action required — compliance alerts */}
       {((stats.pending_reviews_total ?? 0) > 0 || (stats.overdue_reviews_count ?? 0) > 0 || (stats.cleanup_overdue_count ?? 0) > 0) && (
@@ -243,109 +319,6 @@ export function AdminDashboardPage() {
           </CardContent>
         </Card>
       )}
-
-      {/* Row 3 — resource intensity + retention */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard icon={MemoryStick} label="Peak RAM usage" value={ram_mb !== null ? `${ram_mb} MB` : "—"} subtitle="during last scan" />
-        <KpiCard icon={Cpu} label="CPU load" value={cpu_pct !== null ? `${cpu_pct}%` : "—"} subtitle="during last scan" value_class_name={cpu_pct !== null && cpu_pct > 80 ? "text-bosch_red" : undefined} />
-        {has_retention_card && (
-          <KpiCard
-            icon={AlertTriangle}
-            label="Files past retention"
-            value={String(stats.files_past_retention ?? 0)}
-            subtitle="GDPR Art. 5(1)(e) violations"
-            value_class_name={(stats.files_past_retention ?? 0) > 0 ? "text-bosch_red" : "text-success_green"}
-          />
-        )}
-        {/* Connectors status */}
-        <Card className="flex h-full min-h-[122px] flex-col p-3.5">
-          <div className="mb-2 flex items-start justify-between">
-            <p className="text-[11px] uppercase tracking-wide text-text_medium">Connectors</p>
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
-              <Link2 className="h-4 w-4 text-bosch_blue" />
-            </span>
-          </div>
-          <div className="mt-auto space-y-1">
-            {[
-              { name: "Local folder", active: true },
-              { name: "OneDrive", active: false },
-              { name: "SharePoint", active: false },
-            ].map(({ name, active }) => (
-              <div key={name} className="flex items-center gap-1.5">
-                <span className={`h-1.5 w-1.5 rounded-full ${active ? "bg-success_green" : "bg-slate-300 dark:bg-slate-600"}`} />
-                <span className={`text-xs ${active ? "font-medium text-text_dark" : "text-text_medium"}`}>{name}</span>
-                {active && <span className="ml-auto text-[10px] font-semibold text-success_green">ACTIVE</span>}
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-3 xl:grid-cols-[1.55fr_1fr]">
-        <Card>
-          <CardHeader><CardTitle>Findings by document type</CardTitle></CardHeader>
-          <CardContent><DocumentTypeBarChart data={document_type_data} /></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Sensitivity distribution</CardTitle></CardHeader>
-          <CardContent><SensitivityChart data={sensitivity_data} /></CardContent>
-        </Card>
-      </div>
-
-      {/* Auto delta scan scheduler */}
-      <Card className="p-3.5">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-bosch_blue/25 bg-bosch_blue/10">
-              <RefreshCw className="h-4 w-4 text-bosch_blue" />
-            </span>
-            <div>
-              <p className="text-[11px] uppercase tracking-wide text-text_medium">Auto delta scan</p>
-              <p className="text-xs text-text_medium">
-                {scheduler.running ? "Periodic scanning active" : "Disabled — manual trigger only"}
-              </p>
-            </div>
-          </div>
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${scheduler.running ? "bg-success_green/15 text-success_green" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>
-            {scheduler.running ? "ACTIVE" : "OFF"}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-text_medium">Every</span>
-          <input
-            type="number"
-            min={0}
-            step={1}
-            value={sched_value}
-            onChange={(e) => set_sched_value(e.target.value)}
-            className="w-16 rounded-md border border-border_grey bg-white px-2.5 py-1.5 text-sm text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
-          />
-          <select
-            value={sched_unit}
-            onChange={(e) => set_sched_unit(e.target.value as "days" | "weeks" | "months")}
-            className="rounded-md border border-border_grey bg-white px-2.5 py-1.5 text-sm text-text_dark focus:border-bosch_blue focus:outline-none dark:bg-slate-800"
-          >
-            <option value="days">Days</option>
-            <option value="weeks">Weeks</option>
-            <option value="months">Months</option>
-          </select>
-          <button
-            onClick={save_scheduler}
-            disabled={sched_saving}
-            className="inline-flex items-center gap-1.5 rounded-md bg-bosch_blue px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-bosch_blue/85 disabled:opacity-50"
-          >
-            {sched_saving ? "Saving…" : "Apply"}
-          </button>
-          {scheduler.running && (
-            <button
-              onClick={() => { set_sched_value("0"); set_scheduler_config(0).then(r => { if (r.ok) set_scheduler(r.data); }); }}
-              className="text-xs text-text_medium underline hover:text-text_dark"
-            >
-              Disable
-            </button>
-          )}
-        </div>
-      </Card>
 
       <div className="grid gap-3 xl:grid-cols-[1.6fr_1fr]">
         <RecentScansCard recent_scans={stats.recent_scans ?? []} />
