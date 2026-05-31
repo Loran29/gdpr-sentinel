@@ -86,11 +86,10 @@ export const users: User[] = [
 ];
 
 export const source_options: SourceOption[] = [
-  { id: "source_local", label: "Local folder", path: "/data/local/demo/" },
-  { id: "source_onedrive", label: "OneDrive stub", path: "/data/onedrive/all/" },
-  { id: "source_sharepoint_hr", label: "SharePoint HR", path: "/data/shared/HR/" },
-  { id: "source_finance", label: "Finance shared drive", path: "/data/shared/Finance/" },
-  { id: "source_it", label: "IT shared drive", path: "/data/shared/IT/" }
+  { id: "source_all", label: "All sources (27 files)", path: "./data" },
+  { id: "source_onedrive", label: "OneDrive only (10 files)", path: "./data/onedrive" },
+  { id: "source_sharepoint_hr", label: "Shared HR (5 files)", path: "./data/shared/HR" },
+  { id: "source_custom", label: "Custom test files (12 files)", path: "./data/custom" }
 ];
 
 export const base_scans: Scan[] = [

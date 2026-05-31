@@ -273,7 +273,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
               ? "Kept: business need"
               : review_status === "delete"
                 ? "Deleted"
-                : "Marked false positive",
+                : "Acknowledged cleanup",
           review_note,
           resulting_status
         };

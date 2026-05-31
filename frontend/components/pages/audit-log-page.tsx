@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
@@ -8,6 +9,8 @@ import { use_app_state } from "@/context/app-state";
 import { get_audit_log } from "@/src/lib/api-client";
 import { format_timestamp } from "@/lib/utils";
 import { AuditEntry } from "@/types/models";
+
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export function AuditLogPage() {
   const { audit_entries: context_entries } = use_app_state();
@@ -40,12 +43,32 @@ export function AuditLogPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            Review actions
-            {loaded && (
-              <span className="ml-2 text-sm font-normal text-text_medium">({entries.length} total)</span>
-            )}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>
+              Review actions
+              {loaded && (
+                <span className="ml-2 text-sm font-normal text-text_medium">({entries.length} total)</span>
+              )}
+            </CardTitle>
+            <div className="flex gap-2">
+              <a
+                href={`${API_BASE_URL}/findings/export?format=csv`}
+                download
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border_grey bg-white px-3 py-1.5 text-xs font-medium text-text_dark shadow-sm transition-colors hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export CSV
+              </a>
+              <a
+                href={`${API_BASE_URL}/findings/export?format=json`}
+                download
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border_grey bg-white px-3 py-1.5 text-xs font-medium text-text_dark shadow-sm transition-colors hover:bg-slate-50 dark:bg-slate-800 dark:hover:bg-slate-700"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export JSON
+              </a>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="overflow-auto rounded-lg border border-border_grey/80 bg-card_bg p-0">
           <Table className="min-w-[980px]">
