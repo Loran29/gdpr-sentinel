@@ -538,7 +538,9 @@ def admin_dashboard(db: Session = Depends(get_db)) -> DashboardStatsOut:
                 completed_at=r.completed_at,
                 duration_sec=float(r.duration_sec),
                 files_processed=r.files_processed,
+                files_skipped=r.files_skipped,
                 findings_count=r.total_findings,
+                scan_type=r.scan_type,
             )
         )
 

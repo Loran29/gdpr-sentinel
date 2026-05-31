@@ -124,7 +124,9 @@ class RecentScanOut(_Base):
     completed_at: Optional[datetime] = None
     duration_sec: float
     files_processed: int
+    files_skipped: int = 0
     findings_count: int
+    scan_type: Optional[str] = None
 
 
 class StageTiming(BaseModel):

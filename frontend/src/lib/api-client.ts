@@ -454,11 +454,11 @@ export async function submit_finding_action(
   const result = await safe_request<Finding>({
     path: `/findings/${finding_id}/action`,
     method: "POST",
+    query: confirm === true ? { confirm: "true" } : undefined,
     user_id,
     body: {
       action: mapped_action,
-      note,
-      confirm: confirm === true
+      note
     }
   });
 

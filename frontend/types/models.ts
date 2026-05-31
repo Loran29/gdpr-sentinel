@@ -54,7 +54,7 @@ export type Finding = {
   reasoning: string;
   retention_recommendation: string;
   owner_user_id: string | null;
-  owner_name: string;
+  owner_name: string | null;
   owner_type: "direct" | "master_of_data";
   master_of_data_id: string | null;
   scan_timestamp: string;
