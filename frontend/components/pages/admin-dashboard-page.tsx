@@ -251,7 +251,7 @@ export function AdminDashboardPage() {
       <div>
         <p className="mb-2 text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">Scan accuracy</p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · delta ~76× faster with cache" />
+          <KpiCard icon={Clock} label="Avg file scan" value={`${format_number(stats.avg_file_scan_ms)} ms`} subtitle="cold · delta ~26× faster with cache" />
           <KpiCard icon={CheckCircle} label="Detection precision" value={`${stats.precision_pct}%`} subtitle={`F1: ${stats.f1_score} · balance of precision & recall`} value_class_name="text-success_green" />
           <KpiCard icon={Activity} label="Recall" value={`${stats.recall_pct}%`} subtitle="% of real PII caught — higher is safer" />
           {has_retention_card && (

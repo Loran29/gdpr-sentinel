@@ -265,20 +265,34 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             # Pipe-separated compound values are formatting artefacts.
             if "|" in val:
                 continue
-            # Only meaningful when a person is also in the same finding.
+            # A department is GDPR-relevant personal data only when it can be
+            # attributed to a named individual. `has_person` is document-level, so
+            # if it's False the department is an unattributed org label → noise.
             if not has_person:
                 continue
-            # In supplier docs, buyer-side labels ("Purchasing Department") are noise.
-            if document_type == "supplier_onboarding" and "department" in val.lower():
-                continue
-            # Drop generic noise department names — single generic words like
-            # "Compliance", "Sales", "Legal" without a named context.
-            if val.strip() in DEPARTMENT_BLOCKLIST:
-                continue
-            # Drop values that are role/org noise: "Personalwesen", "& Risk" etc.
+            # Structural noise: sentence fragments / dangling conjunctions that the
+            # extractor mis-tagged as a department (e.g. "& Risk"). These are never
+            # a real department name regardless of context.
             val_lower = val.lower()
-            if any(w in val_lower for w in ("personalwesen", "abteilung", "& risk")):
+            if val.strip().startswith("&") or "& risk" in val_lower:
                 continue
+            # Document-type gate. In employee-centric FORMS (expense, IT access,
+            # onboarding, training) the department names the subject's own unit —
+            # real personal data, keep it even if generic ("Sales", "Digital
+            # Operations", "Finance Department", "Personalwesen"). In reports,
+            # memos, minutes and unknown docs a department is usually an org-chart
+            # / stakeholder mention, not anyone's personal data → suppress generic
+            # names. This split fixed 5 false-negatives without the precision loss
+            # of removing the blocklist outright.
+            _DEPT_PERSONAL_DOCTYPES = {
+                "expense_report", "it_access_request",
+                "supplier_onboarding", "training_evaluation",
+            }
+            if document_type not in _DEPT_PERSONAL_DOCTYPES:
+                if val.strip() in DEPARTMENT_BLOCKLIST:
+                    continue
+                if any(w in val_lower for w in ("personalwesen", "abteilung", "department")):
+                    continue
 
         kept.append(ent)
     return kept

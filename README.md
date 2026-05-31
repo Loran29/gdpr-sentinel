@@ -2,7 +2,7 @@
 
 AI-assisted GDPR data discovery prototype for the TechOn 2026 Challenge 03 (Bosch). Scans corporate document stores, classifies personal data, suggests retention, and routes findings to the right human reviewer (direct owner or Master of Data).
 
-**Stack:** Python 3.13 + FastAPI backend · Next.js 14 + TypeScript frontend · SQLite · Presidio + Claude via OpenRouter
+**Stack:** Python 3.13 + FastAPI backend · Next.js 14 + TypeScript frontend · SQLite · Presidio + Gemini 2.5 Flash via OpenRouter
 
 ---
 
@@ -43,7 +43,17 @@ python -m spacy download de_core_news_lg
 cp .env.example .env          # then set OPENROUTER_API_KEY
 ```
 
-On first boot the backend auto-seeds 8 users, 27 sample PDFs, and runs an initial scan. If `OPENROUTER_API_KEY` is empty it falls back to a filename-based stub and still boots.
+On first boot the backend auto-seeds 8 users, 15 sample PDFs (from the public
+GitHub sample repo), and runs an initial scan. If `OPENROUTER_API_KEY` is empty it
+falls back to a filename-based stub and still boots.
+
+To get the **full 27-file eval corpus** (adds 12 custom German/edge-case PDFs that
+`eval/ground_truth.csv` expects), also run:
+
+```powershell
+python scripts/generate_test_pdfs.py   # 8 custom PDFs → data/custom/
+python scripts/generate_extra_pdfs.py  # 4 more       → data/custom/
+```
 
 ## Frontend setup (first time only)
 
@@ -77,19 +87,24 @@ python -m eval.harness
 
 Runs two full scans over 27 PDFs, computes P/R/F1 against `eval/ground_truth.csv`, asserts identical `result_hash` across runs.
 
-**Current numbers** (claude-haiku-4.5, 27 PDFs, 9 document types):
+**Current numbers** (google/gemini-2.5-flash, 27 PDFs, 9 document types):
 
 | Metric | Value |
 |--------|-------|
-| Precision | 84.8% |
-| Recall | 96.9% |
-| F1 | **0.905** |
-| Document type accuracy | **96%** |
-| Reproducibility | **PASS** |
-| Scan cold (parallel) | ~40s / 27 files |
-| Scan cached | ~2s / 27 files |
+| Precision | 92.4% |
+| Recall | 96.0% |
+| F1 | **0.942** |
+| Document type accuracy | **91.7%** |
+| Reproducibility | **PASS** (identical `result_hash` across runs) |
+| Scan cold (parallel) | ~39s / 27 files |
+| Scan cached | ~1.5s / 27 files |
 
-Precision is tuned toward recall — a missed PII record is a GDPR violation; an extra flag is just reviewer time.
+Detection is tuned to keep recall high — a missed PII record is a GDPR violation; an extra flag is just reviewer time.
+
+> Reproduce these numbers from a clean checkout: generate the full 27-file corpus
+> (`python scripts/generate_test_pdfs.py && python scripts/generate_extra_pdfs.py`)
+> then run `python -m eval.harness`. The harness writes a timestamped report to
+> `eval/results/` which the admin dashboard reads for its accuracy KPIs.
 
 ---
 
@@ -132,7 +147,7 @@ python scripts/generate_extra_pdfs.py # regenerate 4 additional test PDFs
 - **Surname dedup** — honorific variants ("Dr. Ingrid Haller" + "Ingrid Haller") collapsed to longest form
 - **Document year extraction** — retention deadline uses earliest 4-digit year in document text, not scan date
 - **Parallel scan** — `ThreadPoolExecutor(max_workers=5)`; LLM calls are I/O-bound
-- **LLM disk cache** — keyed on `sha256(model + text[:8000])`; repeat scans ~76× faster
+- **LLM disk cache** — keyed on `sha256(model + text[:8000])`; repeat scans ~26× faster (39s → 1.5s on 27 files)
 - **OCR fallback** — pdfplumber → byte-sweep → pytesseract (silent if Tesseract not installed)
 - **Owner routing** — direct owner (OneDrive path pattern) → Master of Data (shared drive) → catch-all
 
