@@ -35,7 +35,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     if (pathname === "/login") {
-      router.replace(selected_user.role === "admin" ? "/admin-dashboard" : "/my-findings");
+      router.replace(selected_user.role === "admin" ? "/run-scan" : "/my-findings");
       return;
     }
 
@@ -75,7 +75,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     sign_in(next_user.id);
-    window.location.assign(next_user.role === "admin" ? "/admin-dashboard" : "/my-findings");
+    window.location.assign(next_user.role === "admin" ? "/run-scan" : "/my-findings");
   };
 
   if (!is_app_state_ready) {
