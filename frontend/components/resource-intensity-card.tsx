@@ -24,10 +24,6 @@ export function ResourceIntensityCard({ data }: { data: ResourceIntensity }) {
           <span className="text-xs uppercase tracking-wide text-text_medium">Files skipped</span>
           <span className="font-semibold text-text_dark">{data.files_skipped}</span>
         </div>
-        <div className="flex items-center justify-between border-b border-border_grey/50 py-2 last:border-0">
-          <span className="text-xs uppercase tracking-wide text-text_medium">Text extraction avoided</span>
-          <span className="font-semibold text-text_dark">{data.text_extraction_avoided} files</span>
-        </div>
       </CardContent>
     </Card>
   );

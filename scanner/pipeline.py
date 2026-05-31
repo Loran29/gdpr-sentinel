@@ -38,11 +38,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 DEPARTMENT_BLOCKLIST = {
-    "Project Management", "Engineering", "Finance", "Digital Operations",
-    "People & Culture", "IT Governance", "HR", "IT", "Procurement",
-    "Operations", "Legal", "Compliance", "Marketing", "Sales",
+    "HR", "IT", "Operations", "Legal", "Compliance", "Marketing", "Sales",
     "Research", "Development", "Quality", "Security", "Accounting",
     "Administration", "Management", "Support", "Services",
+    "IT Governance", "Digital Operations", "People & Culture",
+}
+
+# Separate set used ONLY for PERSON_NAME false-positive filtering.
+_PERSON_NAME_DEPT_BLOCKLIST = DEPARTMENT_BLOCKLIST | {
+    "Project Management", "Engineering", "Finance", "Digital Operations",
+    "People & Culture", "IT Governance", "HR", "IT", "Procurement",
 }
 
 # German/English filler words that appear in PERSON_NAME false positives.
@@ -150,7 +155,7 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
                 continue
             if len(val.split()) > 5:
                 continue
-            if val.strip() in DEPARTMENT_BLOCKLIST:
+            if val.strip() in _PERSON_NAME_DEPT_BLOCKLIST:
                 continue
             if not val[0].isupper():
                 continue
@@ -208,6 +213,14 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
             words = val.strip().split()
             if len(words) == 1 and not _SYS_ID_PATTERN.search(val):
                 continue
+            # Multi-word values must either contain a digit/separator OR end with
+            # a known system-like suffix. Generic initiative/programme names are noise.
+            if len(words) >= 2 and not _SYS_ID_PATTERN.search(val):
+                val_lower = val.lower()
+                system_suffixes = ("portal", "system", "platform", "tool", "software",
+                                   "application", "app", "database", "server", "service")
+                if not any(val_lower.endswith(s) or s in val_lower for s in system_suffixes):
+                    continue
 
         # PHONE_NUMBER: must contain at least 7 digits; drop IBAN fragments.
         if ent["type"] == "PHONE_NUMBER":
@@ -235,6 +248,14 @@ def _filter_entities(entities: list, text: str, document_type: str) -> list:
                 continue
             # In supplier docs, buyer-side labels ("Purchasing Department") are noise.
             if document_type == "supplier_onboarding" and "department" in val.lower():
+                continue
+            # Drop generic noise department names — single generic words like
+            # "Compliance", "Sales", "Legal" without a named context.
+            if val.strip() in DEPARTMENT_BLOCKLIST:
+                continue
+            # Drop values that are role/org noise: "Personalwesen", "& Risk" etc.
+            val_lower = val.lower()
+            if any(w in val_lower for w in ("personalwesen", "abteilung", "& risk")):
                 continue
 
         kept.append(ent)

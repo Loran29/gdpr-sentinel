@@ -16,9 +16,9 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:
 // Row left-border color by review status
 function row_status_class(status: Finding["review_status"], active: boolean): string {
   if (active) return "border-l-4 border-l-bosch_red bg-bosch_red/5 dark:bg-bosch_red/10";
-  if (status === "kept_business_need") return "border-l-4 border-l-blue-500 bg-blue-50/40 dark:bg-blue-500/5";
-  if (status === "marked_false_positive") return "border-l-4 border-l-emerald-500 bg-emerald-50/40 dark:bg-emerald-500/5";
-  if (status === "deleted") return "border-l-4 border-l-red-400 bg-red-50/30 opacity-60 dark:bg-red-500/5";
+  if (status === "kept_business_need") return "border-l-4 border-l-blue-500 bg-blue-50 dark:bg-blue-500/5";
+  if (status === "marked_false_positive") return "border-l-4 border-l-emerald-500 bg-emerald-50 dark:bg-emerald-500/5";
+  if (status === "deleted") return "border-l-4 border-l-red-400 bg-red-50/60 opacity-60 dark:bg-red-500/5";
   return "border-l-4 border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/60";
 }
 
@@ -35,6 +35,7 @@ export function MyFindingsPage() {
   const my_findings = useMemo(() => {
     if (!selected_user_id || !selected_user) return [];
     return findings.filter((f) => {
+      if (f.review_status === "deleted") return false;
       if (f.owner_user_id === selected_user_id) return true;
       if (selected_user.is_master_of_data && f.master_of_data_id === selected_user_id) return true;
       return false;

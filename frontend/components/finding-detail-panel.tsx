@@ -90,6 +90,9 @@ export function FindingDetailPanel({
       <div className="rounded-lg border border-border_grey p-3">
         <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-text_medium">Retention recommendation</p>
         <p className="text-sm text-text_dark">{finding.retention_recommendation}</p>
+        {finding.retention_recommendation && (
+          <RetentionDeadlineBadge recommendation={finding.retention_recommendation} scan_timestamp={finding.scan_timestamp} />
+        )}
       </div>
 
       <div>
@@ -179,6 +182,24 @@ function GdprArticleBadges({ reasoning }: { reasoning: string }) {
           GDPR {article}
         </span>
       ))}
+    </div>
+  );
+}
+
+function RetentionDeadlineBadge({ recommendation, scan_timestamp }: { recommendation: string; scan_timestamp: string }) {
+  const year_match = recommendation.match(/\b(20\d{2})\b/);
+  if (!year_match) return null;
+  const deadline_year = parseInt(year_match[1]);
+  const now_year = new Date().getFullYear();
+  const is_overdue = deadline_year <= now_year;
+  return (
+    <div className={`mt-2 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+      is_overdue
+        ? "border-red-400 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300"
+        : "border-slate-300 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300"
+    }`}>
+      {is_overdue ? "⚠ Overdue — " : "Retain until "}
+      {deadline_year}
     </div>
   );
 }
