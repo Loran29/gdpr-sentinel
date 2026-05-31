@@ -73,6 +73,10 @@ export function RunScanPage() {
       const scan = scan_result as unknown as Scan;
       set_progress_pct(100);
       set_current_file(null);
+      // Snap the header timer to the backend's authoritative duration so it
+      // matches the "Duration" metric below (the last in-progress poll reads
+      // slightly less due to the 500ms polling interval).
+      set_elapsed_sec(scan.duration_sec);
       set_completed_scan(scan);
       set_files_processed(scan.files_processed);
       set_files_skipped(scan.files_skipped);
