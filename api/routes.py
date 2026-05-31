@@ -1166,59 +1166,6 @@ async def upload_and_scan(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/findings/export", tags=["Findings"])
-def findings_export(
-    format: str = Query(default="csv", description="csv or json"),
-    status: Optional[str] = Query(default=None),
-    db: Session = Depends(get_db),
-):
-    """Export all findings as CSV or JSON for compliance reporting."""
-    import csv as csv_mod
-    import io as _io
-    import json as _json
-
-    stmt = select(Finding, File).join(File, File.id == Finding.file_id)
-    if status:
-        stmt = stmt.where(Finding.review_status == status)
-    stmt = stmt.order_by(desc(Finding.scan_timestamp))
-    rows = db.execute(stmt).all()
-
-    if format == "json":
-        out = []
-        for f, fl in rows:
-            out.append({
-                "finding_id": f.id, "file_name": fl.name, "file_path": fl.path,
-                "document_type": f.document_type, "sensitivity_level": f.sensitivity_level,
-                "review_status": f.review_status, "owner_user_id": f.owner_user_id,
-                "master_of_data_id": f.master_of_data_id,
-                "scan_timestamp": f.scan_timestamp.isoformat(),
-                "reasoning": f.reasoning, "retention_recommendation": f.retention_recommendation,
-            })
-        return StreamingResponse(
-            iter([_json.dumps(out, indent=2, ensure_ascii=False).encode("utf-8")]),
-            media_type="application/json",
-            headers={"Content-Disposition": "attachment; filename=findings_export.json"},
-        )
-
-    buf = _io.StringIO()
-    writer = csv_mod.writer(buf)
-    writer.writerow([
-        "finding_id", "file_name", "file_path", "document_type",
-        "sensitivity_level", "review_status", "owner_user_id",
-        "scan_timestamp", "reasoning", "retention_recommendation",
-    ])
-    for f, fl in rows:
-        writer.writerow([
-            f.id, fl.name, fl.path, f.document_type, f.sensitivity_level,
-            f.review_status, f.owner_user_id or f.master_of_data_id,
-            f.scan_timestamp.isoformat(), f.reasoning, f.retention_recommendation,
-        ])
-    return StreamingResponse(
-        iter([buf.getvalue().encode("utf-8")]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=findings_export.csv"},
-    )
-
 
 # ---------------------------------------------------------------------------
 # #3 — Scan compare
