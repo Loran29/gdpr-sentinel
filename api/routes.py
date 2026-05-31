@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re as _re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Query, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Path, Query, Response, UploadFile, File as FastAPIFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
@@ -658,21 +659,39 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     one_year_from_now = now.replace(year=now.year + 1)
 
-    # Pull one finding per file (latest) with file info.
-    findings = db.execute(
+    # One finding per file: pick the latest finding id per file_id in SQL,
+    # then join back to get full Finding + File data.
+    latest_finding_ids = (
+        select(func.max(Finding.id).label("id"))
+        .where(Finding.review_status == "pending")
+        .group_by(Finding.file_id)
+        .subquery()
+    )
+    unique = db.execute(
         select(Finding, File)
         .join(File, File.id == Finding.file_id)
-        .where(Finding.review_status == "pending")
+        .where(Finding.id.in_(select(latest_finding_ids.c.id)))
         .order_by(Finding.scan_timestamp.desc())
     ).all()
 
-    # Deduplicate to one finding per file.
-    seen_files: set[str] = set()
-    unique: list[tuple] = []
-    for f, fl in findings:
-        if fl.id not in seen_files:
-            seen_files.add(fl.id)
-            unique.append((f, fl))
+    # Bulk-fetch all users and MoD→user mappings needed for owner_name resolution.
+    owner_user_ids = {f.owner_user_id for f, _ in unique if f.owner_user_id}
+    mod_ids_needed = {f.master_of_data_id for f, _ in unique if f.master_of_data_id}
+
+    users_by_id: dict[str, str] = {}
+    if owner_user_ids:
+        for u in db.execute(select(User).where(User.id.in_(owner_user_ids))).scalars().all():
+            users_by_id[u.id] = u.name
+
+    mod_user_id_map: dict[str, str] = {}
+    if mod_ids_needed:
+        for mod in db.execute(
+            select(MasterOfData).where(MasterOfData.id.in_(mod_ids_needed))
+        ).scalars().all():
+            mod_user_id_map[mod.id] = mod.user_id
+        mod_user_ids = set(mod_user_id_map.values())
+        for u in db.execute(select(User).where(User.id.in_(mod_user_ids))).scalars().all():
+            users_by_id[u.id] = u.name
 
     past: list[RetentionFileOut] = []
     expiring: list[RetentionFileOut] = []
@@ -690,17 +709,11 @@ def admin_retention(db: Session = Depends(get_db)) -> RetentionSummaryOut:
 
         owner_name: Optional[str] = None
         if f.owner_user_id:
-            u = db.execute(select(User).where(User.id == f.owner_user_id)).scalar_one_or_none()
-            if u:
-                owner_name = u.name
+            owner_name = users_by_id.get(f.owner_user_id)
         elif f.master_of_data_id:
-            mod = db.execute(
-                select(MasterOfData).where(MasterOfData.id == f.master_of_data_id)
-            ).scalar_one_or_none()
-            if mod:
-                u = db.execute(select(User).where(User.id == mod.user_id)).scalar_one_or_none()
-                if u:
-                    owner_name = u.name
+            mod_user_id = mod_user_id_map.get(f.master_of_data_id)
+            if mod_user_id:
+                owner_name = users_by_id.get(mod_user_id)
 
         days_overdue = int((now - deadline).days) if deadline < now else None
 
@@ -907,6 +920,49 @@ def file_preview(file_id: str = Path(...), db: Session = Depends(get_db)) -> Res
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{file_row.name}"'},
     )
+
+
+# ---------------------------------------------------------------------------
+# Upload & scan
+# ---------------------------------------------------------------------------
+
+
+@router.post("/upload/scan", tags=["Files"])
+async def upload_and_scan(
+    files: list[UploadFile] = FastAPIFile(...),
+    x_user_id: Optional[str] = Header(default=None, alias="X-User-Id"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Accept one or more PDF uploads, save to data/uploads/, scan immediately."""
+    import uuid as _uuid
+    from pathlib import Path as _Path
+    import threading
+
+    upload_dir = _Path(get_settings().data_root_path) / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_paths = []
+    for upload in files:
+        if not (upload.filename or "").lower().endswith(".pdf"):
+            continue
+        safe_name = _re.sub(r"[^\w\-.]", "_", upload.filename or "upload.pdf")
+        dest = upload_dir / safe_name
+        dest.write_bytes(await upload.read())
+        saved_paths.append(str(dest))
+
+    if not saved_paths:
+        return {"error": "No valid PDF files received"}
+
+    from scanner.pipeline import reserve_scan_id, run_full_scan as _run_full_scan
+
+    scan_id = reserve_scan_id("full", source_id="src_upload")
+
+    def _bg():
+        connector = LocalFolderConnector(root=str(upload_dir))
+        _run_full_scan(connector, source_id="src_upload", scan_id=scan_id)
+
+    threading.Thread(target=_bg, daemon=True).start()
+    return {"scan_id": scan_id, "status": "running", "files_queued": len(saved_paths)}
 
 
 # ---------------------------------------------------------------------------

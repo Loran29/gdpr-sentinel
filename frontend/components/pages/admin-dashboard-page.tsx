@@ -21,6 +21,7 @@ import { KpiCard } from "@/components/kpi-card";
 import { RecentScansCard } from "@/components/recent-scans-card";
 import { ReproducibilityCard } from "@/components/reproducibility-card";
 import { ResourceIntensityCard } from "@/components/resource-intensity-card";
+import { UploadScanCard } from "@/components/upload-scan-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { dashboard_stats, reproducibility_snapshot, resource_intensity } from "@/lib/mock-data";
@@ -238,6 +239,8 @@ export function AdminDashboardPage() {
           <ResourceIntensityCard data={resource_intensity} />
         </div>
       </div>
+
+      <UploadScanCard />
     </div>
   );
 }
