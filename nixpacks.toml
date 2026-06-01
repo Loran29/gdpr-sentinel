@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["python313"]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "python -m spacy download en_core_web_lg",
+  "python -m spacy download de_core_news_lg",
+  "python scripts/generate_test_pdfs.py",
+  "python scripts/generate_extra_pdfs.py"
+]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
