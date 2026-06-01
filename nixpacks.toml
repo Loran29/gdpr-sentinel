@@ -1,21 +1,20 @@
 [variables]
 SPACY_WARNING_IGNORE = "W008"
-PRESIDIO_ANALYZER_DOWNLOAD = "false"
 
 [phases.setup]
-nixPkgs = ["python313"]
+nixPkgs = ["python313", "python313Packages.pip"]
 
 [phases.install]
 cmds = [
-  "pip install -r requirements.txt",
-  "python -m spacy download en_core_web_lg",
-  "python -m spacy download de_core_news_lg",
-  "python scripts/generate_test_pdfs.py",
-  "python scripts/generate_extra_pdfs.py"
+  "python3.13 -m pip install -r requirements.txt",
+  "python3.13 -m spacy download en_core_web_lg",
+  "python3.13 -m spacy download de_core_news_lg",
+  "python3.13 scripts/generate_test_pdfs.py",
+  "python3.13 scripts/generate_extra_pdfs.py"
 ]
 
 [phases.build]
 cmds = []
 
 [start]
-cmd = "python -m uvicorn main:app --host 0.0.0.0 --port $PORT"
+cmd = "python3.13 -m uvicorn main:app --host 0.0.0.0 --port $PORT"
