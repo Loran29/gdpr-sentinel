@@ -1,3 +1,7 @@
+[variables]
+SPACY_WARNING_IGNORE = "W008"
+PRESIDIO_ANALYZER_DOWNLOAD = "false"
+
 [phases.setup]
 nixPkgs = ["python313"]
 
