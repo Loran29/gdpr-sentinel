@@ -92,8 +92,8 @@ Runs two full scans over 27 PDFs, computes P/R/F1 against `eval/ground_truth.csv
 | Recall | 91.8% |
 | F1 | **0.914** |
 | Reproducibility | **PASS** (identical `result_hash` across runs) |
-| Scan cold (parallel) | ~10s / 27 files |
-| Scan cached (delta) | ~2s / 27 files |
+| Scan cold (parallel, LLM via API) | ~10–27s / 27 files |
+| Scan cached (delta, disk cache) | ~1.5–3s / 27 files |
 
 Detection is tuned to keep recall high — a missed PII record is a GDPR violation; an extra flag is just reviewer time.
 
