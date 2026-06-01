@@ -113,7 +113,8 @@ async function safe_request<T>({
   timeout_ms?: number;
 }): Promise<ApiMutationResult<T>> {
   const headers: Record<string, string> = {
-    Accept: "application/json"
+    Accept: "application/json",
+    "ngrok-skip-browser-warning": "true"
   };
 
   if (user_id) {
