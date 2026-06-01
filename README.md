@@ -2,7 +2,7 @@
 
 AI-assisted GDPR data discovery prototype for the TechOn 2026 Challenge 03 (Bosch). Scans corporate document stores, classifies personal data, suggests retention, and routes findings to the right human reviewer (direct owner or Master of Data).
 
-**Stack:** Python 3.13 + FastAPI backend · Next.js 14 + TypeScript frontend · SQLite · Presidio + Gemini 2.5 Flash via OpenRouter
+**Stack:** Python 3.13 + FastAPI backend · Next.js 14 + TypeScript frontend · SQLite · Presidio + Gemini 2.5 Flash via OpenRouter · Microsoft Graph OAuth (OneDrive/SharePoint)
 
 ---
 
@@ -43,12 +43,9 @@ python -m spacy download de_core_news_lg
 cp .env.example .env          # then set OPENROUTER_API_KEY
 ```
 
-On first boot the backend auto-seeds 8 users, 15 sample PDFs (from the public
-GitHub sample repo), and runs an initial scan. If `OPENROUTER_API_KEY` is empty it
-falls back to a filename-based stub and still boots.
+On first boot the backend auto-seeds 8 users, 27 PDFs, and runs an initial scan. If `OPENROUTER_API_KEY` is empty it falls back to a filename-based stub and still boots.
 
-To get the **full 27-file eval corpus** (adds 12 custom German/edge-case PDFs that
-`eval/ground_truth.csv` expects), also run:
+To regenerate the custom test PDFs if they are missing:
 
 ```powershell
 python scripts/generate_test_pdfs.py   # 8 custom PDFs → data/custom/
@@ -72,10 +69,10 @@ pip install pytesseract pdf2image
 
 ## Two personas
 
-| Persona | Users | View |
+| Persona | Users | Landing page |
 |---------|-------|------|
-| **Employee** | u_001–u_004 | Own flagged files only + review actions |
-| **Admin** | u_005–u_008 | Full dashboard, owners, scans, retention, audit log |
+| **Employee** | u_001–u_004 | My findings — own flagged files + review actions |
+| **Admin** | u_005–u_008 | Run scan — full dashboard, all findings, owners, audit log |
 
 ---
 
@@ -91,33 +88,30 @@ Runs two full scans over 27 PDFs, computes P/R/F1 against `eval/ground_truth.csv
 
 | Metric | Value |
 |--------|-------|
-| Precision | 94.1% |
-| Recall | 96.4% |
-| F1 | **0.952** |
-| Document type accuracy | **89.5%** |
+| Precision | 90.9% |
+| Recall | 91.8% |
+| F1 | **0.914** |
 | Reproducibility | **PASS** (identical `result_hash` across runs) |
-| Scan cold (parallel) | ~39s / 27 files |
-| Scan cached | ~1.5s / 27 files |
+| Scan cold (parallel) | ~10s / 27 files |
+| Scan cached (delta) | ~2s / 27 files |
 
 Detection is tuned to keep recall high — a missed PII record is a GDPR violation; an extra flag is just reviewer time.
 
-> Reproduce these numbers from a clean checkout: generate the full 27-file corpus
-> (`python scripts/generate_test_pdfs.py && python scripts/generate_extra_pdfs.py`)
-> then run `python -m eval.harness`. The harness writes a timestamped report to
-> `eval/results/` which the admin dashboard reads for its accuracy KPIs.
+> Reproduce: run `python -m eval.harness` from a clean checkout. The harness writes a timestamped report to `eval/results/` which the admin dashboard reads for its accuracy KPIs.
 
 ---
 
-## API endpoints (27 total)
+## API endpoints (35 total)
 
 | Tag | Endpoints |
 |-----|-----------|
 | **Health** | `GET /health` · `GET /admin/health` |
 | **Users** | `GET /users` |
+| **Auth** | `GET /auth/microsoft` · `GET /auth/callback` · `GET /auth/status` · `POST /auth/logout` · `POST /auth/onedrive/scan` |
 | **Scans** | `POST /scan/run` · `POST /scan/delta` · `GET /scan/{id}` · `GET /scans` · `GET /scans/compare` |
-| **Findings** | `GET /findings/by-user/{id}` · `GET /findings/{id}` · `POST /findings/{id}/action` · `POST /findings/batch-action` · `GET /findings/export` |
-| **Admin** | `GET /admin/dashboard` · `GET /admin/retention` · `POST /admin/retention/notify` · `GET /admin/owners` · `GET /admin/audit` · `GET /connectors/graph/test` |
-| **Files** | `GET /files/{id}/preview` · `GET /files/{id}/summary` · `POST /files/{id}/rescan` |
+| **Findings** | `GET /findings/all` · `GET /findings/by-user/{id}` · `GET /findings/{id}` · `POST /findings/{id}/action` · `POST /findings/{id}/reassign` · `POST /findings/batch-action` · `GET /findings/export` |
+| **Admin** | `GET /admin/dashboard` · `GET /admin/retention` · `POST /admin/retention/notify` · `GET /admin/owners` · `GET /admin/audit` · `GET /admin/scheduler` · `POST /admin/scheduler` · `GET /connectors/graph/test` |
+| **Files** | `GET /files/{id}/preview` · `GET /files/{id}/summary` · `POST /files/{id}/rescan` · `POST /upload/scan` |
 
 Full interactive docs at **http://localhost:8000/docs**.
 
@@ -126,6 +120,35 @@ Full interactive docs at **http://localhost:8000/docs**.
 ## Document types (9)
 
 `expense_report` · `it_access_request` · `incident_report` · `supplier_onboarding` · `training_evaluation` · `medical_record` · `financial_authorization` · `internal_memo` · `unknown`
+
+---
+
+## GDPR compliance flow
+
+The full review lifecycle implemented:
+
+1. **Scan** — full or delta scan detects PII across PDF and DOCX files
+2. **Route** — findings assigned to direct owner (by OneDrive path) or Master of Data (shared drives)
+3. **Employee review** — three structured actions:
+   - **Keep: business need** — requires selecting GDPR legal basis (Art. 6(1)(b/c/f))
+   - **Acknowledge cleanup** — requires setting a deadline date; escalates to `cleanup_overdue` on next scan if deadline passes and file still exists
+   - **Delete** — two-step confirm; physically removes file from disk
+4. **Admin oversight** — All Findings view with filters, ownership reassignment, top-pending-by-owner drill-down
+5. **Audit trail** — every action logged with user, timestamp, legal basis, and deadline
+
+---
+
+## Microsoft OneDrive / SharePoint connector
+
+Real OAuth2 auth-code flow implemented. Configure in `.env`:
+
+```
+AZURE_CLIENT_ID=...
+AZURE_CLIENT_SECRET=...
+AZURE_TENANT_ID=...
+```
+
+Then in the UI: **Run scan → OneDrive connector → Sign in with Microsoft**.
 
 ---
 
@@ -143,14 +166,18 @@ python scripts/generate_extra_pdfs.py # regenerate 4 additional test PDFs
 ## Key design decisions
 
 - **Reproducibility hash** — covers only deterministic (presidio/regex) entities; LLM extras excluded since OpenRouter proxies don't honour `seed`
-- **Per-document language routing** — a cheap deterministic detector picks EN vs DE per file and runs the matching spaCy engine, so German documents (Krankmeldung, SEPA mandates) are analysed by `de_core_news_lg` instead of the English model (+PERSON_NAME precision)
-- **Contextual entity filters** — FINANCIAL_AMOUNT requires co-occurring PERSON_NAME; DEPARTMENT same; SYSTEM_IDENTIFIER single-word alpha dropped; GERMAN_VAT_ID enforces `DE\d{9}` format
+- **Gemini 2.5 Flash** — fast multilingual LLM via OpenRouter; per-document-type extraction rules in prompt (payslips, medical records, IT access requests)
+- **Quality gate** — findings only created if ≥1 deterministic entity with confidence ≥0.7; prevents near-empty findings from clean documents
+- **Contextual entity filters** — FINANCIAL_AMOUNT requires co-occurring PERSON_NAME; DEPARTMENT uses blocklist; SYSTEM_IDENTIFIER requires digit/separator or known system suffix
+- **DEPARTMENT false positive fix** — split blocklist: PERSON_NAME filter uses full set; DEPARTMENT filter uses smaller noise-only set so valid dept names (Engineering, Project Management) are kept
 - **Surname dedup** — honorific variants ("Dr. Ingrid Haller" + "Ingrid Haller") collapsed to longest form
 - **Document year extraction** — retention deadline uses earliest 4-digit year in document text, not scan date
 - **Parallel scan** — `ThreadPoolExecutor(max_workers=5)`; LLM calls are I/O-bound
-- **LLM disk cache** — keyed on `sha256(model + text[:8000])`; repeat scans ~26× faster (39s → 1.5s on 27 files)
+- **LLM disk cache** — keyed on `sha256(model + text[:8000])`; repeat scans ~5× faster
 - **OCR fallback** — pdfplumber → byte-sweep → pytesseract (silent if Tesseract not installed)
+- **Word (.docx) support** — python-docx extracts paragraphs + table cells; same pipeline as PDF
 - **Owner routing** — direct owner (OneDrive path pattern) → Master of Data (shared drive) → catch-all
+- **N+1 query fix** — `/admin/owners` and `/admin/dashboard` use bulk IN+GROUP BY queries
 
 ---
 
@@ -164,20 +191,32 @@ requirements.txt     Python dependencies
 master_of_data.yaml  Owner routing config
 
 api/                 Routes (tagged), Pydantic schemas, error handlers
-scanner/             PDF extractor (+ OCR), Presidio NER, LLM classifier, pipeline
-connectors/          Abstract Connector, local folder, Microsoft Graph stub
+  routes.py          All HTTP routes
+  auth.py            Microsoft OAuth2 (OneDrive/SharePoint)
+  schemas.py         Pydantic request/response models
+scanner/             PDF/DOCX extractor, Presidio NER, LLM classifier, pipeline
+connectors/          Abstract Connector, local folder, Microsoft Graph (real OAuth)
+  graph_connector.py Real OneDrive connector using MSAL + requests
 db/                  SQLAlchemy models, session, seed (8 users + 27 PDFs)
-core/                Enums, settings, canonical hashing
+core/                Enums, settings, canonical hashing, scheduler
 eval/                CLI harness, ground_truth.csv (27 PDFs)
 scripts/             Verification and generation utilities
 
 frontend/            Next.js 14 app (TypeScript + Tailwind)
-  app/               Pages: login, my-findings, admin-dashboard, run-scan, audit-log
+  app/               Pages:
+    login/           Login page
+    my-findings/     Employee review queue
+    admin-dashboard/ Admin KPI dashboard
+    run-scan/        Scan configuration + OneDrive connector + upload
+    all-findings/    Admin view of all findings with reassignment
+    data-owners/     Owner accountability table
+    audit-log/       Review action history + CSV/JSON export
   components/        UI components, charts, finding detail panel
   src/lib/           API client, type definitions
   types/             Shared TypeScript models
 
 FRONTEND_INTEGRATION.md   API handoff guide for frontend developers
+frontend/CONTRACT.md      Data contract and enum definitions
 ```
 
 ---
