@@ -21,7 +21,7 @@ Or run manually:
 **Terminal 1 — backend:**
 ```powershell
 .venv\Scripts\Activate.ps1
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 **Terminal 2 — frontend:**
